@@ -1,0 +1,9 @@
+# pkg/config/default.yaml
+
+server:
+  port: 8080
+
+firewall:
+  mode: main
+  rulesfile: "pkg/rules/rules.yaml"
+  targetaddress: "localhost:80" # 添加目标地址
