@@ -15,6 +15,16 @@ import (
 func HandleHTTPConnection(clientConn net.Conn, targetAddress string) {
 	defer clientConn.Close()
 
+	// 获取客户端IP
+	clientIP, _, _ := net.SplitHostPort(clientConn.RemoteAddr().String())
+
+	// 检查IP是否被允许
+	if !rules.IsAllowed(clientIP) {
+		fmt.Printf("IP在黑名单中，连接已阻断: %s\n", clientIP)
+		clientConn.Close()
+		return
+	}
+
 	// 创建bufio.Reader
 	reader := bufio.NewReader(clientConn)
 
@@ -31,11 +41,13 @@ func HandleHTTPConnection(clientConn net.Conn, targetAddress string) {
 			return
 		}
 
-		// 检查请求是否安全
-		if !rules.CheckRequest(request) {
-			fmt.Println("检测到危险请求，连接已阻断")
-			clientConn.Close()
-			return
+		// 如果IP不在白名单，进行URL和包体检查
+		if rules.IsAllowed(clientIP) {
+			if !rules.CheckRequest(request) {
+				fmt.Println("检测到危险请求，连接已阻断")
+				clientConn.Close()
+				return
+			}
 		}
 
 		// 设置目标地址

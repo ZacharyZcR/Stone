@@ -4,6 +4,7 @@ package rules
 
 import (
 	"fmt"
+	"io/ioutil"
 	"net/http"
 	"strings"
 	"sync"
@@ -66,8 +67,8 @@ func IsAllowed(ip string) bool {
 		}
 	}
 
-	// 默认不允许
-	return false
+	// 如果不在白名单或黑名单中，返回中性结果
+	return true
 }
 
 // CheckRequest 检查请求的URL和包体
@@ -83,8 +84,13 @@ func CheckRequest(req *http.Request) bool {
 	}
 
 	// 检查包体
-	body := make([]byte, req.ContentLength)
-	req.Body.Read(body)
+	body, err := ioutil.ReadAll(req.Body)
+	if err != nil {
+		return false
+	}
+	req.Body.Close() // 关闭后重新设置Body，以便后续使用
+	req.Body = ioutil.NopCloser(strings.NewReader(string(body)))
+
 	for _, pattern := range currentRules.BodyPatterns {
 		if strings.Contains(string(body), pattern) {
 			return false
