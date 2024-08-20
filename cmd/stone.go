@@ -11,9 +11,13 @@ import (
 	"Stone/pkg/rules"
 	"fmt"
 	"log"
+	"time"
 )
 
 func main() {
+	// 记录程序启动时间
+	monitoring.StartTime = time.Now()
+
 	// 初始化日志
 	logging.LogInfo("启动Stone防火墙")
 
@@ -25,7 +29,7 @@ func main() {
 	}
 
 	// 加载规则
-	ruleSet, err := rules.LoadRules(cfg.Firewall.RulesFile)
+	_, err = rules.LoadRules(cfg.Firewall.RulesFile)
 	if err != nil {
 		logging.LogError(fmt.Errorf("加载规则失败: %v", err))
 		return
@@ -41,7 +45,7 @@ func main() {
 
 	// 启动流量捕获
 	go func() {
-		if err := capture.StartCapture(cfg.Server.Port, cfg.Firewall.TargetAddress, ruleSet); err != nil {
+		if err := capture.StartCapture(cfg.Server.Port, cfg.Firewall.TargetAddress); err != nil {
 			logging.LogError(fmt.Errorf("启动流量捕获失败: %v", err))
 		}
 	}()

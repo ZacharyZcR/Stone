@@ -9,8 +9,8 @@ import (
 	"net"
 )
 
-// StartCapture 启动流量捕获，增加规则引擎参数
-func StartCapture(port int, targetAddress string, ruleSet *rules.Rules) error {
+// StartCapture 启动流量捕获
+func StartCapture(port int, targetAddress string) error {
 	// 监听指定端口
 	listener, err := net.Listen("tcp", fmt.Sprintf(":%d", port))
 	if err != nil {
@@ -29,7 +29,7 @@ func StartCapture(port int, targetAddress string, ruleSet *rules.Rules) error {
 		}
 
 		clientIP, _, _ := net.SplitHostPort(conn.RemoteAddr().String())
-		if !ruleSet.IsAllowed(clientIP) {
+		if !rules.IsAllowed(clientIP) {
 			fmt.Printf("拒绝连接: %s\n", clientIP)
 			conn.Close()
 			continue
