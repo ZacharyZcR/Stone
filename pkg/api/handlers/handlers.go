@@ -63,8 +63,8 @@ func UpdateRules(c *gin.Context) {
 		return
 	}
 
-	// 更新全局规则
-	rules.UpdateRules(newRules.Whitelist, newRules.Blacklist)
+	// 更新全局规则，包括白名单、黑名单、URL模式和包体模式
+	rules.UpdateRules(newRules.Whitelist, newRules.Blacklist, newRules.URLPatterns, newRules.BodyPatterns)
 
 	c.JSON(http.StatusOK, gin.H{"status": "rules updated"})
 }

@@ -4,14 +4,19 @@ package rules
 
 import (
 	"fmt"
-	"github.com/spf13/viper"
+	"net/http"
+	"strings"
 	"sync"
+
+	"github.com/spf13/viper"
 )
 
-// Rules 结构体用于存储白名单和黑名单
+// Rules 结构体用于存储各种规则
 type Rules struct {
-	Whitelist []string
-	Blacklist []string
+	Whitelist    []string
+	Blacklist    []string
+	URLPatterns  []string // URL模式
+	BodyPatterns []string // 包体模式
 }
 
 var (
@@ -65,11 +70,37 @@ func IsAllowed(ip string) bool {
 	return false
 }
 
+// CheckRequest 检查请求的URL和包体
+func CheckRequest(req *http.Request) bool {
+	rulesMutex.RLock()
+	defer rulesMutex.RUnlock()
+
+	// 检查URL
+	for _, pattern := range currentRules.URLPatterns {
+		if strings.Contains(req.URL.String(), pattern) {
+			return false
+		}
+	}
+
+	// 检查包体
+	body := make([]byte, req.ContentLength)
+	req.Body.Read(body)
+	for _, pattern := range currentRules.BodyPatterns {
+		if strings.Contains(string(body), pattern) {
+			return false
+		}
+	}
+
+	return true
+}
+
 // UpdateRules 动态更新规则
-func UpdateRules(newWhitelist, newBlacklist []string) {
+func UpdateRules(newWhitelist, newBlacklist, newURLPatterns, newBodyPatterns []string) {
 	rulesMutex.Lock()
 	currentRules.Whitelist = newWhitelist
 	currentRules.Blacklist = newBlacklist
+	currentRules.URLPatterns = newURLPatterns
+	currentRules.BodyPatterns = newBodyPatterns
 	rulesMutex.Unlock()
 }
 

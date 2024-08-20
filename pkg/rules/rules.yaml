@@ -7,3 +7,11 @@ whitelist:
 blacklist:
   - "192.168.1.200"
   - "10.0.0.2"
+
+url_patterns:
+  - "/admin"
+  - "/login"
+
+body_patterns:
+  - "DROP TABLE"
+  - "SELECT * FROM"

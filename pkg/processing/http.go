@@ -3,6 +3,7 @@
 package processing
 
 import (
+	"Stone/pkg/rules"
 	"bufio"
 	"fmt"
 	"io"
@@ -30,9 +31,16 @@ func HandleHTTPConnection(clientConn net.Conn, targetAddress string) {
 			return
 		}
 
-		// 修改请求的目标地址
-		request.URL.Host = targetAddress
+		// 检查请求是否安全
+		if !rules.CheckRequest(request) {
+			fmt.Println("检测到危险请求，连接已阻断")
+			clientConn.Close()
+			return
+		}
+
+		// 设置目标地址
 		request.URL.Scheme = "http"
+		request.URL.Host = targetAddress
 		request.RequestURI = ""
 
 		// 发送请求到目标服务
