@@ -18,22 +18,22 @@
           </tr>
           </thead>
           <tbody>
-          <tr>
+          <tr class="hover:bg-gray-700 transition duration-300 animate-fade-in-up">
             <td class="py-2 px-4 border-b border-gray-700">张三</td>
             <td class="py-2 px-4 border-b border-gray-700">zhangsan@example.com</td>
             <td class="py-2 px-4 border-b border-gray-700">管理员</td>
             <td class="py-2 px-4 border-b border-gray-700">
-              <button class="bg-blue-500 text-white px-4 py-2 rounded hover:bg-blue-700">编辑 ✏️</button>
-              <button class="bg-red-500 text-white px-4 py-2 rounded hover:bg-red-700">删除 🗑️</button>
+              <button class="bg-blue-500 text-white px-4 py-2 rounded hover:bg-blue-700 transform hover:scale-105 transition duration-300">编辑 ✏️</button>
+              <button class="bg-red-500 text-white px-4 py-2 rounded hover:bg-red-700 transform hover:scale-105 transition duration-300">删除 🗑️</button>
             </td>
           </tr>
-          <tr>
+          <tr class="hover:bg-gray-700 transition duration-300 animate-fade-in-up">
             <td class="py-2 px-4 border-b border-gray-700">李四</td>
             <td class="py-2 px-4 border-b border-gray-700">lisi@example.com</td>
             <td class="py-2 px-4 border-b border-gray-700">用户</td>
             <td class="py-2 px-4 border-b border-gray-700">
-              <button class="bg-blue-500 text-white px-4 py-2 rounded hover:bg-blue-700">编辑 ✏️</button>
-              <button class="bg-red-500 text-white px-4 py-2 rounded hover:bg-red-700">删除 🗑️</button>
+              <button class="bg-blue-500 text-white px-4 py-2 rounded hover:bg-blue-700 transform hover:scale-105 transition duration-300">编辑 ✏️</button>
+              <button class="bg-red-500 text-white px-4 py-2 rounded hover:bg-red-700 transform hover:scale-105 transition duration-300">删除 🗑️</button>
             </td>
           </tr>
           </tbody>
@@ -41,26 +41,26 @@
       </div>
 
       <!-- 添加用户 -->
-      <div class="bg-gray-800 p-6 rounded-lg shadow-md">
+      <div class="bg-gray-800 p-6 rounded-lg shadow-md transform transition-all duration-500 hover:shadow-2xl">
         <h2 class="text-2xl font-bold mb-4">添加新用户 ➕</h2>
         <form>
           <div class="mb-4">
             <label class="block text-gray-300 text-sm font-bold mb-2" for="username">用户名</label>
-            <input class="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline" id="username" type="text" placeholder="输入用户名">
+            <input class="shadow appearance-none border-2 border-gray-700 rounded w-full py-2 px-3 bg-gray-900 text-white leading-tight focus:outline-none focus:shadow-outline focus:border-purple-500 transition duration-300" id="username" type="text" placeholder="输入用户名">
           </div>
           <div class="mb-4">
             <label class="block text-gray-300 text-sm font-bold mb-2" for="email">邮箱</label>
-            <input class="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline" id="email" type="email" placeholder="输入邮箱">
+            <input class="shadow appearance-none border-2 border-gray-700 rounded w-full py-2 px-3 bg-gray-900 text-white leading-tight focus:outline-none focus:shadow-outline focus:border-purple-500 transition duration-300" id="email" type="email" placeholder="输入邮箱">
           </div>
           <div class="mb-4">
             <label class="block text-gray-300 text-sm font-bold mb-2" for="role">角色</label>
-            <select class="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline" id="role">
+            <select class="shadow appearance-none border-2 border-gray-700 rounded w-full py-2 px-3 bg-gray-900 text-white leading-tight focus:outline-none focus:shadow-outline focus:border-purple-500 transition duration-300" id="role">
               <option>管理员</option>
               <option>用户</option>
             </select>
           </div>
           <div class="flex items-center justify-between">
-            <button class="bg-purple-500 text-white px-4 py-2 rounded hover:bg-purple-700" type="button">
+            <button class="bg-purple-500 text-white px-4 py-2 rounded hover:bg-purple-700 transform hover:scale-105 transition duration-300" type="button">
               添加用户 ➕
             </button>
           </div>
@@ -88,4 +88,19 @@ export default {
 
 <style>
 @import url('https://fonts.googleapis.com/css2?family=Roboto:wght@400;700&display=swap');
+
+@keyframes fade-in-up {
+  from {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.animate-fade-in-up {
+  animation: fade-in-up 0.5s ease-out;
+}
 </style>
