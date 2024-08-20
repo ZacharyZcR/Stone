@@ -28,6 +28,13 @@ func main() {
 		return
 	}
 
+	// 初始化存储（Redis 和 MongoDB）
+	err = logging.InitStorage("localhost:6379", "mongodb://localhost:27017", "stoneDB", "trafficLogs")
+	if err != nil {
+		logging.LogError(fmt.Errorf("初始化存储失败: %v", err))
+		return
+	}
+
 	// 加载规则
 	_, err = rules.LoadRules(cfg.Firewall.RulesFile)
 	if err != nil {

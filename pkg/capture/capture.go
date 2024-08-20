@@ -5,6 +5,7 @@ package capture
 import (
 	"Stone/pkg/processing"
 	"Stone/pkg/rules"
+	"Stone/pkg/utils"
 	"fmt"
 	"net"
 )
@@ -29,16 +30,14 @@ func StartCapture(port int, targetAddress string) error {
 		}
 
 		clientIP, _, _ := net.SplitHostPort(conn.RemoteAddr().String())
-		if !rules.IsAllowed(clientIP) {
-			fmt.Printf("拒绝连接: %s\n", clientIP)
+		allowed, _ := rules.IsAllowed(clientIP)
+		if !allowed {
+			fmt.Printf("IP在黑名单中，连接已阻断: %s\n", clientIP)
+			utils.LogTraffic(clientIP, "blocked", "", "")
 			conn.Close()
 			continue
 		}
 
-		go func(conn net.Conn) {
-			// 简单协议识别，根据需要选择处理器
-			// 这里假设所有流量都是HTTP
-			processing.HandleHTTPConnection(conn, targetAddress)
-		}(conn)
+		go processing.HandleHTTPConnection(conn, targetAddress)
 	}
 }

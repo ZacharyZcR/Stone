@@ -3,8 +3,10 @@
 package handlers
 
 import (
+	"Stone/pkg/logging"
 	"Stone/pkg/monitoring"
 	"Stone/pkg/rules"
+	"context"
 	"github.com/gin-gonic/gin"
 	"github.com/prometheus/client_golang/prometheus"
 	"net/http"
@@ -67,4 +69,14 @@ func UpdateRules(c *gin.Context) {
 	rules.UpdateRules(newRules.Whitelist, newRules.Blacklist, newRules.URLPatterns, newRules.BodyPatterns)
 
 	c.JSON(http.StatusOK, gin.H{"status": "rules updated"})
+}
+
+// GetLogs 查看日志
+func GetLogs(c *gin.Context) {
+	logs, err := logging.FetchLogsFromMongo(context.Background(), 100) // 获取最近100条日志
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "无法获取日志"})
+		return
+	}
+	c.JSON(http.StatusOK, logs)
 }

@@ -18,5 +18,8 @@ func SetupRouter() *gin.Engine {
 	router.GET("/rules", handlers.GetRules)
 	router.POST("/rules", handlers.UpdateRules)
 
+	// 日志查看API
+	router.GET("/logs", handlers.GetLogs)
+
 	return router
 }

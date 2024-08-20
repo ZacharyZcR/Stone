@@ -14,10 +14,10 @@ import (
 
 // Rules 结构体用于存储各种规则
 type Rules struct {
-	Whitelist    []string
-	Blacklist    []string
-	URLPatterns  []string // URL模式
-	BodyPatterns []string // 包体模式
+	Whitelist    []string `mapstructure:"whitelist"`
+	Blacklist    []string `mapstructure:"blacklist"`
+	URLPatterns  []string `mapstructure:"url_patterns"`
+	BodyPatterns []string `mapstructure:"body_patterns"`
 }
 
 var (
@@ -49,26 +49,26 @@ func LoadRules(rulesPath string) (*Rules, error) {
 }
 
 // IsAllowed 检查IP是否被允许
-func IsAllowed(ip string) bool {
+func IsAllowed(ip string) (allowed bool, inWhitelist bool) {
 	rulesMutex.RLock()
 	defer rulesMutex.RUnlock()
 
 	// 检查黑名单
 	for _, blockedIP := range currentRules.Blacklist {
 		if blockedIP == ip {
-			return false
+			return false, false
 		}
 	}
 
 	// 检查白名单
 	for _, allowedIP := range currentRules.Whitelist {
 		if allowedIP == ip {
-			return true
+			return true, true
 		}
 	}
 
 	// 如果不在白名单或黑名单中，返回中性结果
-	return true
+	return true, false
 }
 
 // CheckRequest 检查请求的URL和包体
@@ -78,22 +78,24 @@ func CheckRequest(req *http.Request) bool {
 
 	// 检查URL
 	for _, pattern := range currentRules.URLPatterns {
-		if strings.Contains(req.URL.String(), pattern) {
+		if strings.Contains(req.URL.Path, pattern) {
 			return false
 		}
 	}
 
 	// 检查包体
-	body, err := ioutil.ReadAll(req.Body)
-	if err != nil {
-		return false
-	}
-	req.Body.Close() // 关闭后重新设置Body，以便后续使用
-	req.Body = ioutil.NopCloser(strings.NewReader(string(body)))
-
-	for _, pattern := range currentRules.BodyPatterns {
-		if strings.Contains(string(body), pattern) {
+	if req.Body != nil {
+		body, err := ioutil.ReadAll(req.Body)
+		if err != nil {
 			return false
+		}
+		req.Body.Close() // 关闭后重新设置Body，以便后续使用
+		req.Body = ioutil.NopCloser(strings.NewReader(string(body)))
+
+		for _, pattern := range currentRules.BodyPatterns {
+			if strings.Contains(string(body), pattern) {
+				return false
+			}
 		}
 	}
 

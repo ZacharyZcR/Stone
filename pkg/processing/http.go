@@ -3,8 +3,8 @@
 package processing
 
 import (
-	"Stone/pkg/monitoring"
 	"Stone/pkg/rules"
+	"Stone/pkg/utils"
 	"bufio"
 	"fmt"
 	"io"
@@ -19,13 +19,6 @@ func HandleHTTPConnection(clientConn net.Conn, targetAddress string) {
 	// 获取客户端IP
 	clientIP, _, _ := net.SplitHostPort(clientConn.RemoteAddr().String())
 
-	// 检查IP是否被允许
-	if !rules.IsAllowed(clientIP) {
-		fmt.Printf("IP在黑名单中，连接已阻断: %s\n", clientIP)
-		monitoring.RequestsTotal.WithLabelValues("blocked").Inc()
-		return
-	}
-
 	// 创建bufio.Reader
 	reader := bufio.NewReader(clientConn)
 
@@ -39,15 +32,20 @@ func HandleHTTPConnection(clientConn net.Conn, targetAddress string) {
 			if err != io.EOF {
 				fmt.Println("读取HTTP请求失败:", err)
 			}
-			monitoring.RequestsTotal.WithLabelValues("failed").Inc()
+			utils.LogTraffic(clientIP, "failed", "", err.Error())
 			return
 		}
 
-		// 如果IP不在白名单，进行URL和包体检查
-		if rules.IsAllowed(clientIP) {
+		// 检查白名单和其他规则
+		_, inWhitelist := rules.IsAllowed(clientIP)
+		if inWhitelist {
+			// 在白名单中，直接放行并记录日志
+			utils.LogTraffic(clientIP, "allowed", request.URL.String(), "")
+		} else {
+			// 不在白名单，进行URL和包体检查
 			if !rules.CheckRequest(request) {
 				fmt.Println("检测到危险请求，连接已阻断")
-				monitoring.RequestsTotal.WithLabelValues("blocked").Inc()
+				utils.LogTraffic(clientIP, "blocked", request.URL.String(), "")
 				return
 			}
 		}
@@ -61,7 +59,7 @@ func HandleHTTPConnection(clientConn net.Conn, targetAddress string) {
 		response, err := client.Do(request)
 		if err != nil {
 			fmt.Println("发送请求到目标服务失败:", err)
-			monitoring.RequestsTotal.WithLabelValues("failed").Inc()
+			utils.LogTraffic(clientIP, "failed", request.URL.String(), err.Error())
 			return
 		}
 
@@ -69,12 +67,12 @@ func HandleHTTPConnection(clientConn net.Conn, targetAddress string) {
 		if err := response.Write(clientConn); err != nil {
 			fmt.Println("写回客户端失败:", err)
 			response.Body.Close()
-			monitoring.RequestsTotal.WithLabelValues("failed").Inc()
+			utils.LogTraffic(clientIP, "failed", request.URL.String(), err.Error())
 			return
 		}
 
 		// 请求成功
-		monitoring.RequestsTotal.WithLabelValues("success").Inc()
+		utils.LogTraffic(clientIP, "success", request.URL.String(), "")
 
 		// 关闭响应体
 		response.Body.Close()
