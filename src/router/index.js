@@ -1,4 +1,5 @@
 import { createRouter, createWebHistory } from 'vue-router'
+import store from '../store'
 import Home from '@/components/HomePage.vue'
 import AttackerProfileTracking from '@/components/AttackerProfileTracking.vue'
 import CustomRuleManagement from '@/components/CustomRuleManagement.vue'
@@ -54,6 +55,15 @@ const routes = [
 const router = createRouter({
     history: createWebHistory(process.env.BASE_URL),
     routes
+})
+
+router.beforeEach((to, from, next) => {
+    const isAuthenticated = store.state.isAuthenticated
+    if (!isAuthenticated && to.name !== 'LoginPage' && to.name !== 'Home') {
+        next({ name: 'Home' })
+    } else {
+        next()
+    }
 })
 
 export default router
