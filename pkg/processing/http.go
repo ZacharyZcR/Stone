@@ -3,6 +3,7 @@
 package processing
 
 import (
+	"Stone/pkg/monitoring"
 	"Stone/pkg/rules"
 	"bufio"
 	"fmt"
@@ -21,7 +22,7 @@ func HandleHTTPConnection(clientConn net.Conn, targetAddress string) {
 	// 检查IP是否被允许
 	if !rules.IsAllowed(clientIP) {
 		fmt.Printf("IP在黑名单中，连接已阻断: %s\n", clientIP)
-		clientConn.Close()
+		monitoring.RequestsTotal.WithLabelValues("blocked").Inc()
 		return
 	}
 
@@ -38,6 +39,7 @@ func HandleHTTPConnection(clientConn net.Conn, targetAddress string) {
 			if err != io.EOF {
 				fmt.Println("读取HTTP请求失败:", err)
 			}
+			monitoring.RequestsTotal.WithLabelValues("failed").Inc()
 			return
 		}
 
@@ -45,7 +47,7 @@ func HandleHTTPConnection(clientConn net.Conn, targetAddress string) {
 		if rules.IsAllowed(clientIP) {
 			if !rules.CheckRequest(request) {
 				fmt.Println("检测到危险请求，连接已阻断")
-				clientConn.Close()
+				monitoring.RequestsTotal.WithLabelValues("blocked").Inc()
 				return
 			}
 		}
@@ -59,6 +61,7 @@ func HandleHTTPConnection(clientConn net.Conn, targetAddress string) {
 		response, err := client.Do(request)
 		if err != nil {
 			fmt.Println("发送请求到目标服务失败:", err)
+			monitoring.RequestsTotal.WithLabelValues("failed").Inc()
 			return
 		}
 
@@ -66,8 +69,12 @@ func HandleHTTPConnection(clientConn net.Conn, targetAddress string) {
 		if err := response.Write(clientConn); err != nil {
 			fmt.Println("写回客户端失败:", err)
 			response.Body.Close()
+			monitoring.RequestsTotal.WithLabelValues("failed").Inc()
 			return
 		}
+
+		// 请求成功
+		monitoring.RequestsTotal.WithLabelValues("success").Inc()
 
 		// 关闭响应体
 		response.Body.Close()
