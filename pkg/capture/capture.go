@@ -33,7 +33,7 @@ func StartCapture(port int, targetAddress string) error {
 		allowed, _ := rules.IsAllowed(clientIP)
 		if !allowed {
 			fmt.Printf("IP在黑名单中，连接已阻断: %s\n", clientIP)
-			utils.LogTraffic(clientIP, "blocked", "", "")
+			utils.LogTraffic(clientIP, targetAddress, "", "", nil, "", err.Error())
 			conn.Close()
 			continue
 		}

@@ -32,7 +32,7 @@ func HandleHTTPConnection(clientConn net.Conn, targetAddress string) {
 			if err != io.EOF {
 				fmt.Println("读取HTTP请求失败:", err)
 			}
-			utils.LogTraffic(clientIP, "failed", "", err.Error())
+			utils.LogTraffic(clientIP, targetAddress, "", "", nil, "", err.Error())
 			return
 		}
 
@@ -40,12 +40,12 @@ func HandleHTTPConnection(clientConn net.Conn, targetAddress string) {
 		_, inWhitelist := rules.IsAllowed(clientIP)
 		if inWhitelist {
 			// 在白名单中，直接放行并记录日志
-			utils.LogTraffic(clientIP, "allowed", request.URL.String(), "")
+			utils.LogTraffic(clientIP, targetAddress, request.URL.String(), request.Method, request.Header, "", "")
 		} else {
 			// 不在白名单，进行URL和包体检查
 			if !rules.CheckRequest(request) {
 				fmt.Println("检测到危险请求，连接已阻断")
-				utils.LogTraffic(clientIP, "blocked", request.URL.String(), "")
+				utils.LogTraffic(clientIP, targetAddress, request.URL.String(), request.Method, request.Header, "", "Blocked by rules")
 				return
 			}
 		}
@@ -59,7 +59,7 @@ func HandleHTTPConnection(clientConn net.Conn, targetAddress string) {
 		response, err := client.Do(request)
 		if err != nil {
 			fmt.Println("发送请求到目标服务失败:", err)
-			utils.LogTraffic(clientIP, "failed", request.URL.String(), err.Error())
+			utils.LogTraffic(clientIP, targetAddress, request.URL.String(), request.Method, request.Header, "", err.Error())
 			return
 		}
 
@@ -67,12 +67,12 @@ func HandleHTTPConnection(clientConn net.Conn, targetAddress string) {
 		if err := response.Write(clientConn); err != nil {
 			fmt.Println("写回客户端失败:", err)
 			response.Body.Close()
-			utils.LogTraffic(clientIP, "failed", request.URL.String(), err.Error())
+			utils.LogTraffic(clientIP, targetAddress, request.URL.String(), request.Method, request.Header, "", err.Error())
 			return
 		}
 
 		// 请求成功
-		utils.LogTraffic(clientIP, "success", request.URL.String(), "")
+		utils.LogTraffic(clientIP, targetAddress, request.URL.String(), request.Method, request.Header, "", "")
 
 		// 关闭响应体
 		response.Body.Close()
