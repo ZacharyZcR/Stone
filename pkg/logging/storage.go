@@ -75,13 +75,35 @@ func LogTraffic(logData map[string]interface{}) error {
 	return nil
 }
 
-// FetchLogsFromMongo 从MongoDB中检索日志
-func FetchLogsFromMongo(ctx context.Context, limit int64) ([]bson.M, error) {
+// FetchLogsFromMongoWithFilters 从MongoDB中检索日志，支持过滤
+func FetchLogsFromMongoWithFilters(ctx context.Context, limit int64, startDateTime, endDateTime time.Time, ip string) ([]bson.M, error) {
+	// 构建过滤条件
+	filter := bson.D{}
+
+	// 添加时间过滤条件
+	timeFilter := bson.D{}
+	if !startDateTime.IsZero() {
+		timeFilter = append(timeFilter, bson.E{"$gte", startDateTime})
+	}
+	if !endDateTime.IsZero() {
+		timeFilter = append(timeFilter, bson.E{"$lte", endDateTime})
+	}
+	if len(timeFilter) > 0 {
+		filter = append(filter, bson.E{"timestamp", timeFilter})
+	}
+
+	// 添加IP过滤条件
+	if ip != "" {
+		filter = append(filter, bson.E{"client_ip", ip})
+	}
+
+	// 设置查询选项
 	findOptions := options.Find()
 	findOptions.SetLimit(limit)
 	findOptions.SetSort(bson.D{{"timestamp", -1}}) // 按时间倒序排列
 
-	cursor, err := mongoCollection.Find(ctx, bson.D{}, findOptions)
+	// 执行查询
+	cursor, err := mongoCollection.Find(ctx, filter, findOptions)
 	if err != nil {
 		return nil, fmt.Errorf("检索日志失败: %v", err)
 	}
