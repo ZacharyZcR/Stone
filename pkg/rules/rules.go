@@ -6,69 +6,76 @@ import (
 	"fmt"
 	"io/ioutil"
 	"net/http"
+	"regexp"
 	"strings"
 	"sync"
 
 	"github.com/spf13/viper"
 )
 
-// Rules 结构体用于存储各种规则
-type Rules struct {
-	Whitelist    []string `mapstructure:"whitelist"`
-	Blacklist    []string `mapstructure:"blacklist"`
-	URLPatterns  []string `mapstructure:"url_patterns"`
-	BodyPatterns []string `mapstructure:"body_patterns"`
+type Pattern struct {
+	Name  string `mapstructure:"name"`
+	Regex string `mapstructure:"regex"`
+}
+
+// InterceptionRules 用于存储拦截规则
+type InterceptionRules struct {
+	URLPatterns  []Pattern `mapstructure:"url_patterns"`
+	BodyPatterns []Pattern `mapstructure:"body_patterns"`
+}
+
+// IPControlRules 用于存储IP控制规则
+type IPControlRules struct {
+	Whitelist []string `mapstructure:"whitelist"`
+	Blacklist []string `mapstructure:"blacklist"`
 }
 
 var (
-	currentRules Rules
-	rulesMutex   sync.RWMutex
+	interceptionRules InterceptionRules
+	ipControlRules    IPControlRules
+	rulesMutex        sync.RWMutex
 )
 
-// LoadRules 加载规则文件
-func LoadRules(rulesPath string) (*Rules, error) {
+// LoadInterceptionRules 加载拦截规则文件
+func LoadInterceptionRules(rulesPath string) (*InterceptionRules, error) {
 	viper.SetConfigFile(rulesPath)
 	viper.SetConfigType("yaml")
 
-	// 读取规则文件
 	if err := viper.ReadInConfig(); err != nil {
-		return nil, fmt.Errorf("读取规则文件失败: %w", err)
+		return nil, fmt.Errorf("读取拦截规则文件失败: %w", err)
 	}
 
-	var rules Rules
+	var rules InterceptionRules
 	if err := viper.Unmarshal(&rules); err != nil {
-		return nil, fmt.Errorf("解析规则文件失败: %w", err)
+		return nil, fmt.Errorf("解析拦截规则文件失败: %w", err)
 	}
 
-	// 初始化全局规则
 	rulesMutex.Lock()
-	currentRules = rules
+	interceptionRules = rules
 	rulesMutex.Unlock()
 
 	return &rules, nil
 }
 
-// IsAllowed 检查IP是否被允许
-func IsAllowed(ip string) (allowed bool, inWhitelist bool) {
-	rulesMutex.RLock()
-	defer rulesMutex.RUnlock()
+// LoadIPControlRules 加载IP控制规则文件
+func LoadIPControlRules(rulesPath string) (*IPControlRules, error) {
+	viper.SetConfigFile(rulesPath)
+	viper.SetConfigType("yaml")
 
-	// 检查黑名单
-	for _, blockedIP := range currentRules.Blacklist {
-		if blockedIP == ip {
-			return false, false
-		}
+	if err := viper.ReadInConfig(); err != nil {
+		return nil, fmt.Errorf("读取IP控制规则文件失败: %w", err)
 	}
 
-	// 检查白名单
-	for _, allowedIP := range currentRules.Whitelist {
-		if allowedIP == ip {
-			return true, true
-		}
+	var rules IPControlRules
+	if err := viper.Unmarshal(&rules); err != nil {
+		return nil, fmt.Errorf("解析IP控制规则文件失败: %w", err)
 	}
 
-	// 如果不在白名单或黑名单中，返回中性结果
-	return true, false
+	rulesMutex.Lock()
+	ipControlRules = rules
+	rulesMutex.Unlock()
+
+	return &rules, nil
 }
 
 // CheckRequest 检查请求的URL和包体
@@ -77,8 +84,12 @@ func CheckRequest(req *http.Request) bool {
 	defer rulesMutex.RUnlock()
 
 	// 检查URL
-	for _, pattern := range currentRules.URLPatterns {
-		if strings.Contains(req.URL.Path, pattern) {
+	for _, pattern := range interceptionRules.URLPatterns {
+		matched, err := regexp.MatchString(pattern.Regex, req.URL.Path)
+		if err != nil {
+			continue // 如果正则表达式有问题，跳过此规则
+		}
+		if matched {
 			return false
 		}
 	}
@@ -92,8 +103,12 @@ func CheckRequest(req *http.Request) bool {
 		req.Body.Close() // 关闭后重新设置Body，以便后续使用
 		req.Body = ioutil.NopCloser(strings.NewReader(string(body)))
 
-		for _, pattern := range currentRules.BodyPatterns {
-			if strings.Contains(string(body), pattern) {
+		for _, pattern := range interceptionRules.BodyPatterns {
+			matched, err := regexp.MatchString(pattern.Regex, string(body))
+			if err != nil {
+				continue // 如果正则表达式有问题，跳过此规则
+			}
+			if matched {
 				return false
 			}
 		}
@@ -102,19 +117,56 @@ func CheckRequest(req *http.Request) bool {
 	return true
 }
 
-// UpdateRules 动态更新规则
-func UpdateRules(newWhitelist, newBlacklist, newURLPatterns, newBodyPatterns []string) {
+// IsAllowed 检查IP是否被允许
+func IsAllowed(ip string) (allowed bool, inWhitelist bool) {
+	rulesMutex.RLock()
+	defer rulesMutex.RUnlock()
+
+	// 检查黑名单
+	for _, blockedIP := range ipControlRules.Blacklist {
+		if blockedIP == ip {
+			return false, false
+		}
+	}
+
+	// 检查白名单
+	for _, allowedIP := range ipControlRules.Whitelist {
+		if allowedIP == ip {
+			return true, true
+		}
+	}
+
+	// 如果不在白名单或黑名单中，返回中性结果
+	return true, false
+}
+
+// UpdateIPControlRules 动态更新IP控制规则
+func UpdateIPControlRules(newWhitelist, newBlacklist []string) {
 	rulesMutex.Lock()
-	currentRules.Whitelist = newWhitelist
-	currentRules.Blacklist = newBlacklist
-	currentRules.URLPatterns = newURLPatterns
-	currentRules.BodyPatterns = newBodyPatterns
+	ipControlRules.Whitelist = newWhitelist
+	ipControlRules.Blacklist = newBlacklist
 	rulesMutex.Unlock()
 }
 
-// GetCurrentRules 获取当前规则
-func GetCurrentRules() Rules {
+// UpdateInterceptionRules 动态更新拦截规则
+func UpdateInterceptionRules(newURLPatterns, newBodyPatterns []Pattern) {
+	rulesMutex.Lock()
+	defer rulesMutex.Unlock()
+
+	interceptionRules.URLPatterns = newURLPatterns
+	interceptionRules.BodyPatterns = newBodyPatterns
+}
+
+// GetInterceptionRules 获取当前拦截规则
+func GetInterceptionRules() InterceptionRules {
 	rulesMutex.RLock()
 	defer rulesMutex.RUnlock()
-	return currentRules
+	return interceptionRules
+}
+
+// GetIPControlRules 获取当前IP控制规则
+func GetIPControlRules() IPControlRules {
+	rulesMutex.RLock()
+	defer rulesMutex.RUnlock()
+	return ipControlRules
 }

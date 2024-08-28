@@ -35,10 +35,17 @@ func main() {
 		return
 	}
 
-	// 加载规则
-	_, err = rules.LoadRules(cfg.Firewall.RulesFile)
+	// 加载拦截规则
+	_, err = rules.LoadInterceptionRules("pkg/rules/interception_rules.yaml")
 	if err != nil {
-		logging.LogError(fmt.Errorf("加载规则失败: %v", err))
+		logging.LogError(fmt.Errorf("加载拦截规则失败: %v", err))
+		return
+	}
+
+	// 加载IP控制规则
+	_, err = rules.LoadIPControlRules("pkg/rules/ip_control.yaml")
+	if err != nil {
+		logging.LogError(fmt.Errorf("加载IP控制规则失败: %v", err))
 		return
 	}
 

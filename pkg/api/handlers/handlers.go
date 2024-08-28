@@ -50,25 +50,44 @@ func GetStatus(c *gin.Context) {
 	})
 }
 
-// GetRules 获取当前规则
-func GetRules(c *gin.Context) {
-	// 获取当前规则
-	currentRules := rules.GetCurrentRules()
+// GetIPControlRules 获取当前IP控制规则
+func GetIPControlRules(c *gin.Context) {
+	currentRules := rules.GetIPControlRules()
 	c.JSON(http.StatusOK, currentRules)
 }
 
-// UpdateRules 更新规则
-func UpdateRules(c *gin.Context) {
-	var newRules rules.Rules
+// GetInterceptionRules 获取当前拦截规则
+func GetInterceptionRules(c *gin.Context) {
+	currentRules := rules.GetInterceptionRules()
+	c.JSON(http.StatusOK, currentRules)
+}
+
+// UpdateIPControlRules 更新IP控制规则
+func UpdateIPControlRules(c *gin.Context) {
+	var newRules rules.IPControlRules
 	if err := c.ShouldBindJSON(&newRules); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
 
-	// 更新全局规则，包括白名单、黑名单、URL模式和包体模式
-	rules.UpdateRules(newRules.Whitelist, newRules.Blacklist, newRules.URLPatterns, newRules.BodyPatterns)
+	rules.UpdateIPControlRules(newRules.Whitelist, newRules.Blacklist)
+	c.JSON(http.StatusOK, gin.H{"status": "IP control rules updated"})
+}
 
-	c.JSON(http.StatusOK, gin.H{"status": "rules updated"})
+// UpdateInterceptionRules 更新拦截规则
+func UpdateInterceptionRules(c *gin.Context) {
+	var newRules struct {
+		URLPatterns  []rules.Pattern `json:"url_patterns"`
+		BodyPatterns []rules.Pattern `json:"body_patterns"`
+	}
+
+	if err := c.ShouldBindJSON(&newRules); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	rules.UpdateInterceptionRules(newRules.URLPatterns, newRules.BodyPatterns)
+	c.JSON(http.StatusOK, gin.H{"status": "Interception rules updated"})
 }
 
 // GetLogs 查看日志
