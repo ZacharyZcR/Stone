@@ -40,19 +40,23 @@
       <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
         <!-- 黑名单 IP 列表 -->
         <div class="bg-gray-800 p-6 rounded-lg shadow-md">
-          <h2 class="text-2xl font-bold mb-4">黑名单 IP 列表 🚫</h2>
+          <h2 class="text-2xl font-bold mb-6">黑名单 IP 列表 🚫</h2>
+          <div class="mb-6 flex">
+            <input v-model="newBlacklistIP" class="shadow appearance-none border-2 border-gray-700 rounded w-full py-3 px-4 bg-gray-900 text-white leading-tight focus:outline-none focus:shadow-outline focus:border-red-500 transition duration-300" placeholder="添加 IP 到黑名单">
+            <button @click="addToBlacklist" class="bg-red-500 text-white px-6 py-3 rounded-lg hover:bg-red-700 ml-3 transform hover:scale-105 transition duration-300">添加 ➕</button>
+          </div>
           <table class="min-w-full bg-gray-800">
             <thead>
             <tr>
-              <th class="py-2 px-4 border-b-2 border-gray-700">IP 地址</th>
-              <th class="py-2 px-4 border-b-2 border-gray-700">操作</th>
+              <th class="py-3 px-4 border-b-2 border-gray-700 text-left">IP 地址</th>
+              <th class="py-3 px-4 border-b-2 border-gray-700 text-left">操作</th>
             </tr>
             </thead>
             <tbody>
             <tr v-for="ip in blacklist" :key="ip" class="hover:bg-gray-700 transition duration-300">
-              <td class="py-2 px-4 border-b border-gray-700">{{ ip }}</td>
-              <td class="py-2 px-4 border-b border-gray-700">
-                <button class="bg-red-500 text-white px-4 py-2 rounded hover:bg-red-700">移除 🗑️</button>
+              <td class="py-3 px-4 border-b border-gray-700 text-left">{{ ip }}</td>
+              <td class="py-3 px-4 border-b border-gray-700 text-left">
+                <button @click="removeFromBlacklist(ip)" class="bg-red-500 text-white px-4 py-2 rounded-lg hover:bg-red-700 transform hover:scale-105 transition duration-300">移除 🗑️</button>
               </td>
             </tr>
             </tbody>
@@ -61,24 +65,35 @@
 
         <!-- 白名单 IP 列表 -->
         <div class="bg-gray-800 p-6 rounded-lg shadow-md">
-          <h2 class="text-2xl font-bold mb-4">白名单 IP 列表 ✅</h2>
+          <h2 class="text-2xl font-bold mb-6">白名单 IP 列表 ✅</h2>
+          <div class="mb-6 flex">
+            <input v-model="newWhitelistIP" class="shadow appearance-none border-2 border-gray-700 rounded w-full py-3 px-4 bg-gray-900 text-white leading-tight focus:outline-none focus:shadow-outline focus:border-blue-500 transition duration-300" placeholder="添加 IP 到白名单">
+            <button @click="addToWhitelist" class="bg-blue-500 text-white px-6 py-3 rounded-lg hover:bg-blue-700 ml-3 transform hover:scale-105 transition duration-300">添加 ➕</button>
+          </div>
           <table class="min-w-full bg-gray-800">
             <thead>
             <tr>
-              <th class="py-2 px-4 border-b-2 border-gray-700">IP 地址</th>
-              <th class="py-2 px-4 border-b-2 border-gray-700">操作</th>
+              <th class="py-3 px-4 border-b-2 border-gray-700 text-left">IP 地址</th>
+              <th class="py-3 px-4 border-b-2 border-gray-700 text-left">操作</th>
             </tr>
             </thead>
             <tbody>
             <tr v-for="ip in whitelist" :key="ip" class="hover:bg-gray-700 transition duration-300">
-              <td class="py-2 px-4 border-b border-gray-700">{{ ip }}</td>
-              <td class="py-2 px-4 border-b border-gray-700">
-                <button class="bg-blue-500 text-white px-4 py-2 rounded hover:bg-blue-700">移除 🗑️</button>
+              <td class="py-3 px-4 border-b border-gray-700 text-left">{{ ip }}</td>
+              <td class="py-3 px-4 border-b border-gray-700 text-left">
+                <button @click="removeFromWhitelist(ip)" class="bg-blue-500 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transform hover:scale-105 transition duration-300">移除 🗑️</button>
               </td>
             </tr>
             </tbody>
           </table>
         </div>
+      </div>
+
+      <!-- 保存黑白名单配置 -->
+      <div class="flex justify-end mt-6">
+        <button @click="saveIPControlRules" class="bg-teal-500 text-white px-6 py-3 rounded-lg hover:bg-teal-700 transform hover:scale-105 transition duration-300">
+          保存黑白名单配置 💾
+        </button>
       </div>
     </div>
 
@@ -102,6 +117,8 @@ export default {
   setup() {
     const whitelist = ref([]);
     const blacklist = ref([]);
+    const newWhitelistIP = ref('');
+    const newBlacklistIP = ref('');
 
     const fetchData = async () => {
       try {
@@ -114,11 +131,45 @@ export default {
       }
     };
 
+    const addToWhitelist = () => {
+      if (newWhitelistIP.value && !whitelist.value.includes(newWhitelistIP.value)) {
+        whitelist.value.push(newWhitelistIP.value);
+        newWhitelistIP.value = '';
+      }
+    };
+
+    const addToBlacklist = () => {
+      if (newBlacklistIP.value && !blacklist.value.includes(newBlacklistIP.value)) {
+        blacklist.value.push(newBlacklistIP.value);
+        newBlacklistIP.value = '';
+      }
+    };
+
+    const removeFromWhitelist = (ip) => {
+      whitelist.value = whitelist.value.filter(item => item !== ip);
+    };
+
+    const removeFromBlacklist = (ip) => {
+      blacklist.value = blacklist.value.filter(item => item !== ip);
+    };
+
+    const saveIPControlRules = async () => {
+      try {
+        await axios.post('http://172.20.2.226:8081/ip-control-rules', {
+          Whitelist: whitelist.value,
+          Blacklist: blacklist.value
+        });
+        alert('黑白名单配置已保存');
+      } catch (error) {
+        console.error('保存配置失败:', error);
+      }
+    };
+
     onMounted(() => {
       fetchData();
     });
 
-    return { whitelist, blacklist };
+    return { whitelist, blacklist, newWhitelistIP, newBlacklistIP, addToWhitelist, addToBlacklist, removeFromWhitelist, removeFromBlacklist, saveIPControlRules };
   }
 };
 </script>
