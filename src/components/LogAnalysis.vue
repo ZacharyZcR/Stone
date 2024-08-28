@@ -8,14 +8,18 @@
       <!-- 日志过滤器 -->
       <div class="bg-gray-800 p-6 rounded-lg shadow-md mb-8">
         <h2 class="text-2xl font-bold mb-4">日志过滤器 🔍</h2>
-        <form class="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <form class="grid grid-cols-1 md:grid-cols-4 gap-4">
           <div>
-            <label class="block text-gray-300 text-sm font-bold mb-2" for="startDate">开始日期</label>
-            <input class="shadow appearance-none border-2 border-gray-700 rounded w-full py-2 px-3 bg-gray-900 text-white leading-tight focus:outline-none focus:shadow-outline focus:border-indigo-500 transition duration-300" id="startDate" type="date">
+            <label class="block text-gray-300 text-sm font-bold mb-2" for="startDateTime">开始时间</label>
+            <input class="shadow appearance-none border-2 border-gray-700 rounded w-full py-2 px-3 bg-gray-900 text-white leading-tight focus:outline-none focus:shadow-outline focus:border-indigo-500 transition duration-300" id="startDateTime" type="datetime-local">
           </div>
           <div>
-            <label class="block text-gray-300 text-sm font-bold mb-2" for="endDate">结束日期</label>
-            <input class="shadow appearance-none border-2 border-gray-700 rounded w-full py-2 px-3 bg-gray-900 text-white leading-tight focus:outline-none focus:shadow-outline focus:border-indigo-500 transition duration-300" id="endDate" type="date">
+            <label class="block text-gray-300 text-sm font-bold mb-2" for="endDateTime">结束时间</label>
+            <input class="shadow appearance-none border-2 border-gray-700 rounded w-full py-2 px-3 bg-gray-900 text-white leading-tight focus:outline-none focus:shadow-outline focus:border-indigo-500 transition duration-300" id="endDateTime" type="datetime-local">
+          </div>
+          <div>
+            <label class="block text-gray-300 text-sm font-bold mb-2" for="ipFilter">IP 地址</label>
+            <input class="shadow appearance-none border-2 border-gray-700 rounded w-full py-2 px-3 bg-gray-900 text-white leading-tight focus:outline-none focus:shadow-outline focus:border-indigo-500 transition duration-300" id="ipFilter" type="text" placeholder="输入 IP 地址">
           </div>
           <div class="flex items-end">
             <button class="bg-indigo-500 text-white px-4 py-2 rounded hover:bg-indigo-700 transform hover:scale-105 transition duration-300 w-full" type="button">
