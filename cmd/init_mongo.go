@@ -46,13 +46,11 @@ func main() {
 	// 插入规则文档
 	interceptionRulesDoc := bson.M{
 		"type": "interception",
-		"url_patterns": []bson.M{
-			{"name": "Admin Access", "regex": "/admin"},
-			{"name": "Login Access", "regex": "/login"},
-		},
-		"body_patterns": []bson.M{
-			{"name": "SQL Injection - Drop", "regex": "DROP TABLE"},
-			{"name": "SQL Injection - Select", "regex": "SELECT \\* FROM"},
+		"rules": []bson.M{
+			{"name": "Admin Access", "regex": "/admin", "method": "GET"},
+			{"name": "Login Access", "regex": "/login", "method": "POST"},
+			{"name": "SQL Injection - Drop", "regex": "DROP TABLE", "method": "POST"},
+			{"name": "SQL Injection - Select", "regex": "SELECT \\* FROM", "method": "GET"},
 		},
 	}
 

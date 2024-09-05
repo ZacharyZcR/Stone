@@ -15,20 +15,26 @@ import (
 )
 
 type Pattern struct {
-	Name  string `mapstructure:"name"`
-	Regex string `mapstructure:"regex"`
+	Name   string `bson:"name" json:"name"`
+	Regex  string `bson:"regex" json:"regex"`
+	Method string `bson:"method" json:"method"` // 添加HTTP请求方法
 }
 
 // InterceptionRules 用于存储拦截规则
 type InterceptionRules struct {
-	URLPatterns  []Pattern `mapstructure:"url_patterns"`
-	BodyPatterns []Pattern `mapstructure:"body_patterns"`
+	Rules []Pattern `bson:"rules" json:"rules"`
 }
 
 // IPControlRules 用于存储IP控制规则
 type IPControlRules struct {
 	Whitelist []string `mapstructure:"whitelist"`
 	Blacklist []string `mapstructure:"blacklist"`
+}
+
+type IPControlRule struct {
+	IP        string `bson:"ip" json:"ip"`
+	IsAllowed bool   `bson:"is_allowed" json:"-"`
+	Type      string `json:"type"` // 用于解析请求体中的类型
 }
 
 var (
@@ -73,13 +79,31 @@ func LoadIPControlRules(ctx context.Context) (*IPControlRules, error) {
 	return &rules, nil
 }
 
-// CheckRequest 检查请求的URL和包体
+// CheckRequest 检查请求的URL、包体和头部
 func CheckRequest(req *http.Request) bool {
 	rulesMutex.RLock()
 	defer rulesMutex.RUnlock()
 
-	// 检查URL
-	for _, pattern := range interceptionRules.URLPatterns {
+	// 读取请求体
+	var body []byte
+	if req.Body != nil {
+		var err error
+		body, err = ioutil.ReadAll(req.Body)
+		if err != nil {
+			return false
+		}
+		req.Body.Close() // 关闭后重新设置Body，以便后续使用
+		req.Body = ioutil.NopCloser(strings.NewReader(string(body)))
+	}
+
+	// 检查规则
+	for _, pattern := range interceptionRules.Rules {
+		// 检查HTTP方法
+		if pattern.Method != "" && pattern.Method != req.Method {
+			continue
+		}
+
+		// 检查URL
 		matched, err := regexp.MatchString(pattern.Regex, req.URL.Path)
 		if err != nil {
 			continue // 如果正则表达式有问题，跳过此规则
@@ -87,24 +111,28 @@ func CheckRequest(req *http.Request) bool {
 		if matched {
 			return false
 		}
-	}
 
-	// 检查包体
-	if req.Body != nil {
-		body, err := ioutil.ReadAll(req.Body)
-		if err != nil {
-			return false
-		}
-		req.Body.Close() // 关闭后重新设置Body，以便后续使用
-		req.Body = ioutil.NopCloser(strings.NewReader(string(body)))
-
-		for _, pattern := range interceptionRules.BodyPatterns {
-			matched, err := regexp.MatchString(pattern.Regex, string(body))
+		// 检查包体
+		if len(body) > 0 {
+			matched, err = regexp.MatchString(pattern.Regex, string(body))
 			if err != nil {
 				continue // 如果正则表达式有问题，跳过此规则
 			}
 			if matched {
 				return false
+			}
+		}
+
+		// 检查头部
+		for _, values := range req.Header {
+			for _, value := range values {
+				matched, err = regexp.MatchString(pattern.Regex, value)
+				if err != nil {
+					continue // 如果正则表达式有问题，跳过此规则
+				}
+				if matched {
+					return false
+				}
 			}
 		}
 	}
@@ -135,50 +163,6 @@ func IsAllowed(ip string) (allowed bool, inWhitelist bool) {
 	return true, false
 }
 
-// UpdateIPControlRules 动态更新IP控制规则
-func UpdateIPControlRules(newWhitelist, newBlacklist []string) error {
-	rulesMutex.Lock()
-	defer rulesMutex.Unlock()
-
-	ipControlRules.Whitelist = newWhitelist
-	ipControlRules.Blacklist = newBlacklist
-
-	// 更新MongoDB中的IP控制规则
-	_, err := mongoCollection.UpdateOne(
-		context.Background(),
-		bson.M{"type": "ip_control"},
-		bson.M{
-			"$set": bson.M{
-				"whitelist": newWhitelist,
-				"blacklist": newBlacklist,
-			},
-		},
-	)
-	return err
-}
-
-// UpdateInterceptionRules 动态更新拦截规则
-func UpdateInterceptionRules(newURLPatterns, newBodyPatterns []Pattern) error {
-	rulesMutex.Lock()
-	defer rulesMutex.Unlock()
-
-	interceptionRules.URLPatterns = newURLPatterns
-	interceptionRules.BodyPatterns = newBodyPatterns
-
-	// 更新MongoDB中的拦截规则
-	_, err := mongoCollection.UpdateOne(
-		context.Background(),
-		bson.M{"type": "interception"},
-		bson.M{
-			"$set": bson.M{
-				"url_patterns":  newURLPatterns,
-				"body_patterns": newBodyPatterns,
-			},
-		},
-	)
-	return err
-}
-
 // GetInterceptionRules 获取当前拦截规则
 func GetInterceptionRules() InterceptionRules {
 	rulesMutex.RLock()
@@ -191,4 +175,147 @@ func GetIPControlRules() IPControlRules {
 	rulesMutex.RLock()
 	defer rulesMutex.RUnlock()
 	return ipControlRules
+}
+
+// GetIPRule 获取特定IP的规则
+func GetIPRule(ip string) (IPControlRule, bool) {
+	rulesMutex.RLock()
+	defer rulesMutex.RUnlock()
+
+	for _, allowedIP := range ipControlRules.Whitelist {
+		if allowedIP == ip {
+			return IPControlRule{IP: ip, IsAllowed: true}, true
+		}
+	}
+	for _, blockedIP := range ipControlRules.Blacklist {
+		if blockedIP == ip {
+			return IPControlRule{IP: ip, IsAllowed: false}, true
+		}
+	}
+	return IPControlRule{}, false
+}
+
+// AddIPRule 添加新的IP规则
+func AddIPRule(rule IPControlRule) error {
+	rulesMutex.Lock()
+	defer rulesMutex.Unlock()
+
+	// 根据类型设置IsAllowed
+	if rule.Type == "whitelist" {
+		rule.IsAllowed = true
+	} else if rule.Type == "blacklist" {
+		rule.IsAllowed = false
+	} else {
+		return fmt.Errorf("无效的IP规则类型")
+	}
+
+	if rule.IsAllowed {
+		ipControlRules.Whitelist = append(ipControlRules.Whitelist, rule.IP)
+	} else {
+		ipControlRules.Blacklist = append(ipControlRules.Blacklist, rule.IP)
+	}
+
+	// 更新MongoDB中的IP控制规则
+	_, err := mongoCollection.UpdateOne(
+		context.Background(),
+		bson.M{"type": "ip_control"},
+		bson.M{
+			"$set": bson.M{
+				"whitelist": ipControlRules.Whitelist,
+				"blacklist": ipControlRules.Blacklist,
+			},
+		},
+	)
+	return err
+}
+
+// DeleteIPRule 删除特定IP的规则
+func DeleteIPRule(ip string) error {
+	rulesMutex.Lock()
+	defer rulesMutex.Unlock()
+
+	// 从白名单或黑名单中删除IP
+	for i, allowedIP := range ipControlRules.Whitelist {
+		if allowedIP == ip {
+			ipControlRules.Whitelist = append(ipControlRules.Whitelist[:i], ipControlRules.Whitelist[i+1:]...)
+			break
+		}
+	}
+	for i, blockedIP := range ipControlRules.Blacklist {
+		if blockedIP == ip {
+			ipControlRules.Blacklist = append(ipControlRules.Blacklist[:i], ipControlRules.Blacklist[i+1:]...)
+			break
+		}
+	}
+
+	// 更新MongoDB中的IP控制规则
+	_, err := mongoCollection.UpdateOne(
+		context.Background(),
+		bson.M{"type": "ip_control"},
+		bson.M{
+			"$set": bson.M{
+				"whitelist": ipControlRules.Whitelist,
+				"blacklist": ipControlRules.Blacklist,
+			},
+		},
+	)
+	return err
+}
+
+// GetInterceptionRule 获取特定名称的规则
+func GetInterceptionRule(name string) (Pattern, bool) {
+	rulesMutex.RLock()
+	defer rulesMutex.RUnlock()
+
+	for _, rule := range interceptionRules.Rules {
+		if rule.Name == name {
+			return rule, true
+		}
+	}
+	return Pattern{}, false
+}
+
+// AddInterceptionRule 添加新的拦截规则
+func AddInterceptionRule(rule Pattern) error {
+	rulesMutex.Lock()
+	defer rulesMutex.Unlock()
+
+	interceptionRules.Rules = append(interceptionRules.Rules, rule)
+
+	// 更新MongoDB中的拦截规则
+	_, err := mongoCollection.UpdateOne(
+		context.Background(),
+		bson.M{"type": "interception"},
+		bson.M{
+			"$set": bson.M{
+				"rules": interceptionRules.Rules,
+			},
+		},
+	)
+	return err
+}
+
+// DeleteInterceptionRule 删除特定名称的规则
+func DeleteInterceptionRule(name string) error {
+	rulesMutex.Lock()
+	defer rulesMutex.Unlock()
+
+	for i, rule := range interceptionRules.Rules {
+		if rule.Name == name {
+			interceptionRules.Rules = append(interceptionRules.Rules[:i], interceptionRules.Rules[i+1:]...)
+			break
+		}
+	}
+
+	// 更新MongoDB中的拦截规则
+	_, err := mongoCollection.UpdateOne(
+		context.Background(),
+		bson.M{"type": "interception"},
+		bson.M{
+			"$set": bson.M{
+				"rules": interceptionRules.Rules,
+			},
+		},
+	)
+	return err
 }

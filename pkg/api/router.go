@@ -27,12 +27,16 @@ func SetupRouter() *gin.Engine {
 	router.GET("/status", handlers.GetStatus)
 
 	// IP控制规则管理API
-	router.GET("/ip-control-rules", handlers.GetIPControlRules)
-	router.POST("/ip-control-rules", handlers.UpdateIPControlRules)
+	router.GET("/ip-control-rules", handlers.HandleIPControlRules)
+	router.GET("/ip-control-rules/:ip", handlers.HandleIPControlRules)
+	router.POST("/ip-control-rules", handlers.HandleIPControlRules)
+	router.DELETE("/ip-control-rules/:ip", handlers.HandleIPControlRules)
 
 	// 拦截规则管理API
-	router.GET("/interception-rules", handlers.GetInterceptionRules)
-	router.POST("/interception-rules", handlers.UpdateInterceptionRules)
+	router.GET("/interception-rules", handlers.HandleInterceptionRules)
+	router.GET("/interception-rules/:name", handlers.HandleInterceptionRules)
+	router.POST("/interception-rules", handlers.HandleInterceptionRules)
+	router.DELETE("/interception-rules/:name", handlers.HandleInterceptionRules)
 
 	// 日志查看API
 	router.GET("/logs", handlers.GetLogs)

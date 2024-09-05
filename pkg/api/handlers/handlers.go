@@ -50,46 +50,6 @@ func GetStatus(c *gin.Context) {
 	})
 }
 
-// GetIPControlRules 获取当前IP控制规则
-func GetIPControlRules(c *gin.Context) {
-	currentRules := rules.GetIPControlRules()
-	c.JSON(http.StatusOK, currentRules)
-}
-
-// GetInterceptionRules 获取当前拦截规则
-func GetInterceptionRules(c *gin.Context) {
-	currentRules := rules.GetInterceptionRules()
-	c.JSON(http.StatusOK, currentRules)
-}
-
-// UpdateIPControlRules 更新IP控制规则
-func UpdateIPControlRules(c *gin.Context) {
-	var newRules rules.IPControlRules
-	if err := c.ShouldBindJSON(&newRules); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
-		return
-	}
-
-	rules.UpdateIPControlRules(newRules.Whitelist, newRules.Blacklist)
-	c.JSON(http.StatusOK, gin.H{"status": "IP control rules updated"})
-}
-
-// UpdateInterceptionRules 更新拦截规则
-func UpdateInterceptionRules(c *gin.Context) {
-	var newRules struct {
-		URLPatterns  []rules.Pattern `json:"url_patterns"`
-		BodyPatterns []rules.Pattern `json:"body_patterns"`
-	}
-
-	if err := c.ShouldBindJSON(&newRules); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
-		return
-	}
-
-	rules.UpdateInterceptionRules(newRules.URLPatterns, newRules.BodyPatterns)
-	c.JSON(http.StatusOK, gin.H{"status": "Interception rules updated"})
-}
-
 // GetLogs 查看日志
 func GetLogs(c *gin.Context) {
 	// 解析查询参数
@@ -122,4 +82,86 @@ func GetLogs(c *gin.Context) {
 		return
 	}
 	c.JSON(http.StatusOK, logs)
+}
+
+// HandleIPControlRules 处理IP控制规则的操作
+func HandleIPControlRules(c *gin.Context) {
+	switch c.Request.Method {
+	case http.MethodGet:
+		ip := c.Param("ip")
+		if ip == "" {
+			// 获取所有IP控制规则
+			currentRules := rules.GetIPControlRules()
+			c.JSON(http.StatusOK, currentRules)
+		} else {
+			// 获取特定IP的规则
+			rule, found := rules.GetIPRule(ip)
+			if !found {
+				c.JSON(http.StatusNotFound, gin.H{"error": "IP not found"})
+				return
+			}
+			c.JSON(http.StatusOK, rule)
+		}
+	case http.MethodPost:
+		var newRule rules.IPControlRule
+		if err := c.ShouldBindJSON(&newRule); err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+			return
+		}
+		if err := rules.AddIPRule(newRule); err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to add IP rule"})
+			return
+		}
+		c.JSON(http.StatusOK, gin.H{"status": "IP rule added"})
+	case http.MethodDelete:
+		ip := c.Param("ip")
+		if err := rules.DeleteIPRule(ip); err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to delete IP rule"})
+			return
+		}
+		c.JSON(http.StatusOK, gin.H{"status": "IP rule deleted"})
+	default:
+		c.JSON(http.StatusMethodNotAllowed, gin.H{"error": "Method not allowed"})
+	}
+}
+
+// HandleInterceptionRules 处理拦截规则的操作
+func HandleInterceptionRules(c *gin.Context) {
+	switch c.Request.Method {
+	case http.MethodGet:
+		name := c.Param("name")
+		if name == "" {
+			// 获取所有拦截规则
+			currentRules := rules.GetInterceptionRules()
+			c.JSON(http.StatusOK, currentRules)
+		} else {
+			// 获取特定名称的规则
+			rule, found := rules.GetInterceptionRule(name)
+			if !found {
+				c.JSON(http.StatusNotFound, gin.H{"error": "Rule not found"})
+				return
+			}
+			c.JSON(http.StatusOK, rule)
+		}
+	case http.MethodPost:
+		var newRule rules.Pattern
+		if err := c.ShouldBindJSON(&newRule); err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+			return
+		}
+		if err := rules.AddInterceptionRule(newRule); err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to add interception rule"})
+			return
+		}
+		c.JSON(http.StatusOK, gin.H{"status": "Interception rule added"})
+	case http.MethodDelete:
+		name := c.Param("name")
+		if err := rules.DeleteInterceptionRule(name); err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to delete interception rule"})
+			return
+		}
+		c.JSON(http.StatusOK, gin.H{"status": "Interception rule deleted"})
+	default:
+		c.JSON(http.StatusMethodNotAllowed, gin.H{"error": "Method not allowed"})
+	}
 }
