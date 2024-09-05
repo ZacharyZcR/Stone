@@ -21,6 +21,11 @@ var (
 	ctx             = context.Background()
 )
 
+// SetMongoCollection 设置MongoDB集合
+func SetMongoCollection(collection *mongo.Collection) {
+	mongoCollection = collection
+}
+
 // InitStorage 初始化Redis和MongoDB连接
 func InitStorage(redisAddr, mongoURI, mongoDB, mongoCollectionName string) error {
 	// 初始化Redis客户端
@@ -54,6 +59,11 @@ func InitStorage(redisAddr, mongoURI, mongoDB, mongoCollectionName string) error
 
 // LogTraffic 保存流量日志到Redis和MongoDB
 func LogTraffic(logData map[string]interface{}) error {
+	// 确保 Redis 和 MongoDB 客户端已初始化
+	if redisClient == nil || mongoCollection == nil {
+		return fmt.Errorf("Redis或MongoDB客户端未初始化")
+	}
+
 	// 将日志数据转换为JSON字符串
 	logDataJSON, err := json.Marshal(logData)
 	if err != nil {
@@ -61,7 +71,8 @@ func LogTraffic(logData map[string]interface{}) error {
 	}
 
 	// 将日志保存到Redis
-	err = redisClient.Set(ctx, fmt.Sprintf("log:%d", time.Now().UnixNano()), logDataJSON, 0).Err()
+	redisKey := fmt.Sprintf("log:%d", time.Now().UnixNano())
+	err = redisClient.Set(ctx, redisKey, logDataJSON, 0).Err()
 	if err != nil {
 		return fmt.Errorf("保存到Redis失败: %v", err)
 	}
@@ -69,6 +80,8 @@ func LogTraffic(logData map[string]interface{}) error {
 	// 将日志保存到MongoDB
 	_, err = mongoCollection.InsertOne(ctx, logData)
 	if err != nil {
+		// 如果MongoDB存储失败，可以选择在Redis中标记此日志为未同步，稍后重试
+		redisClient.Set(ctx, fmt.Sprintf("%s:unsynced", redisKey), logDataJSON, 0)
 		return fmt.Errorf("保存到MongoDB失败: %v", err)
 	}
 
@@ -81,14 +94,14 @@ func FetchLogsFromMongoWithFilters(ctx context.Context, limit int64, startDateTi
 	filter := bson.D{}
 
 	// 添加时间过滤条件
-	timeFilter := bson.D{}
-	if !startDateTime.IsZero() {
-		timeFilter = append(timeFilter, bson.E{"$gte", startDateTime})
-	}
-	if !endDateTime.IsZero() {
-		timeFilter = append(timeFilter, bson.E{"$lte", endDateTime})
-	}
-	if len(timeFilter) > 0 {
+	if !startDateTime.IsZero() || !endDateTime.IsZero() {
+		timeFilter := bson.D{}
+		if !startDateTime.IsZero() {
+			timeFilter = append(timeFilter, bson.E{"$gte", startDateTime})
+		}
+		if !endDateTime.IsZero() {
+			timeFilter = append(timeFilter, bson.E{"$lte", endDateTime})
+		}
 		filter = append(filter, bson.E{"timestamp", timeFilter})
 	}
 

@@ -36,18 +36,19 @@ func HandleHTTPConnection(clientConn net.Conn, targetAddress string) {
 			return
 		}
 
-		// 检查白名单和其他规则
-		_, inWhitelist := rules.IsAllowed(clientIP)
-		if inWhitelist {
-			// 在白名单中，直接放行并记录日志
-			utils.LogTraffic(clientIP, targetAddress, request.URL.String(), request.Method, request.Header, "", "")
-		} else {
-			// 不在白名单，进行URL和包体检查
-			if !rules.CheckRequest(request) {
-				fmt.Println("检测到危险请求，连接已阻断")
-				utils.LogTraffic(clientIP, targetAddress, request.URL.String(), request.Method, request.Header, "", "Blocked by rules")
-				return
-			}
+		// 检查IP是否在黑名单
+		allowed, inWhitelist := rules.IsAllowed(clientIP)
+		if !allowed {
+			fmt.Printf("IP在黑名单中，连接已阻断: %s\n", clientIP)
+			utils.LogTraffic(clientIP, targetAddress, request.URL.String(), request.Method, request.Header, "", "IP在黑名单中")
+			return
+		}
+
+		// 如果IP不在白名单，进行URL和包体检查
+		if !inWhitelist && !rules.CheckRequest(request) {
+			fmt.Println("检测到危险请求，连接已阻断")
+			utils.LogTraffic(clientIP, targetAddress, request.URL.String(), request.Method, request.Header, "", "Blocked by rules")
+			return
 		}
 
 		// 设置目标地址

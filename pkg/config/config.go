@@ -3,42 +3,40 @@
 package config
 
 import (
+	"context"
 	"fmt"
-	"github.com/spf13/viper"
+	"go.mongodb.org/mongo-driver/bson"
+	"go.mongodb.org/mongo-driver/mongo"
 )
 
-// Config 结构体用于存储配置参数
 type Config struct {
 	Server   ServerConfig
 	Firewall FirewallConfig
 }
 
-// ServerConfig 服务器相关配置
 type ServerConfig struct {
-	Port int
+	Port int `bson:"port"`
 }
 
-// FirewallConfig 防火墙相关配置
 type FirewallConfig struct {
-	Mode          string
-	RulesFile     string
-	TargetAddress string // 添加目标地址字段
+	Mode          string `bson:"mode"`
+	RulesFile     string `bson:"rulesfile"`
+	TargetAddress string `bson:"targetaddress"`
 }
 
-// LoadConfig 加载配置文件
-func LoadConfig(configPath string) (*Config, error) {
-	viper.SetConfigFile(configPath)
-	viper.SetConfigType("yaml")
+var mongoCollection *mongo.Collection
 
-	// 读取配置文件
-	if err := viper.ReadInConfig(); err != nil {
-		return nil, fmt.Errorf("读取配置文件失败: %w", err)
-	}
+// SetMongoCollection 设置MongoDB集合
+func SetMongoCollection(collection *mongo.Collection) {
+	mongoCollection = collection
+}
 
+// LoadConfig 从MongoDB加载配置文件
+func LoadConfig(ctx context.Context) (*Config, error) {
 	var config Config
-	if err := viper.Unmarshal(&config); err != nil {
-		return nil, fmt.Errorf("解析配置文件失败: %w", err)
+	err := mongoCollection.FindOne(ctx, bson.M{"type": "config"}).Decode(&config)
+	if err != nil {
+		return nil, fmt.Errorf("从MongoDB读取配置文件失败: %w", err)
 	}
-
 	return &config, nil
 }

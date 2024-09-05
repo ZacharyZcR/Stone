@@ -3,14 +3,15 @@
 package rules
 
 import (
+	"context"
 	"fmt"
+	"go.mongodb.org/mongo-driver/bson"
+	"go.mongodb.org/mongo-driver/mongo"
 	"io/ioutil"
 	"net/http"
 	"regexp"
 	"strings"
 	"sync"
-
-	"github.com/spf13/viper"
 )
 
 type Pattern struct {
@@ -34,20 +35,20 @@ var (
 	interceptionRules InterceptionRules
 	ipControlRules    IPControlRules
 	rulesMutex        sync.RWMutex
+	mongoCollection   *mongo.Collection // 假设已初始化
 )
 
-// LoadInterceptionRules 加载拦截规则文件
-func LoadInterceptionRules(rulesPath string) (*InterceptionRules, error) {
-	viper.SetConfigFile(rulesPath)
-	viper.SetConfigType("yaml")
+// SetMongoCollection 设置MongoDB集合
+func SetMongoCollection(collection *mongo.Collection) {
+	mongoCollection = collection
+}
 
-	if err := viper.ReadInConfig(); err != nil {
-		return nil, fmt.Errorf("读取拦截规则文件失败: %w", err)
-	}
-
+// LoadInterceptionRules 从MongoDB加载拦截规则
+func LoadInterceptionRules(ctx context.Context) (*InterceptionRules, error) {
 	var rules InterceptionRules
-	if err := viper.Unmarshal(&rules); err != nil {
-		return nil, fmt.Errorf("解析拦截规则文件失败: %w", err)
+	err := mongoCollection.FindOne(ctx, bson.M{"type": "interception"}).Decode(&rules)
+	if err != nil {
+		return nil, fmt.Errorf("从MongoDB读取拦截规则失败: %w", err)
 	}
 
 	rulesMutex.Lock()
@@ -57,18 +58,12 @@ func LoadInterceptionRules(rulesPath string) (*InterceptionRules, error) {
 	return &rules, nil
 }
 
-// LoadIPControlRules 加载IP控制规则文件
-func LoadIPControlRules(rulesPath string) (*IPControlRules, error) {
-	viper.SetConfigFile(rulesPath)
-	viper.SetConfigType("yaml")
-
-	if err := viper.ReadInConfig(); err != nil {
-		return nil, fmt.Errorf("读取IP控制规则文件失败: %w", err)
-	}
-
+// LoadIPControlRules 从MongoDB加载IP控制规则
+func LoadIPControlRules(ctx context.Context) (*IPControlRules, error) {
 	var rules IPControlRules
-	if err := viper.Unmarshal(&rules); err != nil {
-		return nil, fmt.Errorf("解析IP控制规则文件失败: %w", err)
+	err := mongoCollection.FindOne(ctx, bson.M{"type": "ip_control"}).Decode(&rules)
+	if err != nil {
+		return nil, fmt.Errorf("从MongoDB读取IP控制规则失败: %w", err)
 	}
 
 	rulesMutex.Lock()
@@ -141,20 +136,47 @@ func IsAllowed(ip string) (allowed bool, inWhitelist bool) {
 }
 
 // UpdateIPControlRules 动态更新IP控制规则
-func UpdateIPControlRules(newWhitelist, newBlacklist []string) {
+func UpdateIPControlRules(newWhitelist, newBlacklist []string) error {
 	rulesMutex.Lock()
+	defer rulesMutex.Unlock()
+
 	ipControlRules.Whitelist = newWhitelist
 	ipControlRules.Blacklist = newBlacklist
-	rulesMutex.Unlock()
+
+	// 更新MongoDB中的IP控制规则
+	_, err := mongoCollection.UpdateOne(
+		context.Background(),
+		bson.M{"type": "ip_control"},
+		bson.M{
+			"$set": bson.M{
+				"whitelist": newWhitelist,
+				"blacklist": newBlacklist,
+			},
+		},
+	)
+	return err
 }
 
 // UpdateInterceptionRules 动态更新拦截规则
-func UpdateInterceptionRules(newURLPatterns, newBodyPatterns []Pattern) {
+func UpdateInterceptionRules(newURLPatterns, newBodyPatterns []Pattern) error {
 	rulesMutex.Lock()
 	defer rulesMutex.Unlock()
 
 	interceptionRules.URLPatterns = newURLPatterns
 	interceptionRules.BodyPatterns = newBodyPatterns
+
+	// 更新MongoDB中的拦截规则
+	_, err := mongoCollection.UpdateOne(
+		context.Background(),
+		bson.M{"type": "interception"},
+		bson.M{
+			"$set": bson.M{
+				"url_patterns":  newURLPatterns,
+				"body_patterns": newBodyPatterns,
+			},
+		},
+	)
+	return err
 }
 
 // GetInterceptionRules 获取当前拦截规则

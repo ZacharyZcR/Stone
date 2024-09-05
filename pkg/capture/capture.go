@@ -4,8 +4,6 @@ package capture
 
 import (
 	"Stone/pkg/processing"
-	"Stone/pkg/rules"
-	"Stone/pkg/utils"
 	"fmt"
 	"net"
 )
@@ -26,15 +24,6 @@ func StartCapture(port int, targetAddress string) error {
 		conn, err := listener.Accept()
 		if err != nil {
 			fmt.Println("接受连接失败:", err)
-			continue
-		}
-
-		clientIP, _, _ := net.SplitHostPort(conn.RemoteAddr().String())
-		allowed, _ := rules.IsAllowed(clientIP)
-		if !allowed {
-			fmt.Printf("IP在黑名单中，连接已阻断: %s\n", clientIP)
-			utils.LogTraffic(clientIP, targetAddress, "", "", nil, "", err.Error())
-			conn.Close()
 			continue
 		}
 
