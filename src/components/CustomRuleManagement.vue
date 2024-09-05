@@ -18,22 +18,12 @@
           </tr>
           </thead>
           <tbody>
-          <tr v-for="rule in urlPatterns" :key="rule.Name" class="hover:bg-gray-700 transition duration-300 animate-fade-in-up">
-            <td class="py-2 px-4 border-b border-gray-700 text-left">{{ rule.Name }}</td>
-            <td class="py-2 px-4 border-b border-gray-700 text-left">{{ rule.Regex }}</td>
-            <td class="py-2 px-4 border-b border-gray-700 text-left">GET</td>
+          <tr v-for="rule in rules" :key="rule.name" class="hover:bg-gray-700 transition duration-300 animate-fade-in-up">
+            <td class="py-2 px-4 border-b border-gray-700 text-left">{{ rule.name }}</td>
+            <td class="py-2 px-4 border-b border-gray-700 text-left">{{ rule.regex }}</td>
+            <td class="py-2 px-4 border-b border-gray-700 text-left">{{ rule.method }}</td>
             <td class="py-2 px-4 border-b border-gray-700 text-left">
-              <button class="bg-blue-500 text-white px-4 py-2 rounded hover:bg-blue-700 transform hover:scale-105 transition duration-300">编辑 ✏️</button>
-              <button class="bg-red-500 text-white px-4 py-2 rounded hover:bg-red-700 transform hover:scale-105 transition duration-300">删除 🗑️</button>
-            </td>
-          </tr>
-          <tr v-for="rule in bodyPatterns" :key="rule.Name" class="hover:bg-gray-700 transition duration-300 animate-fade-in-up">
-            <td class="py-2 px-4 border-b border-gray-700 text-left">{{ rule.Name }}</td>
-            <td class="py-2 px-4 border-b border-gray-700 text-left">{{ rule.Regex }}</td>
-            <td class="py-2 px-4 border-b border-gray-700 text-left">POST</td>
-            <td class="py-2 px-4 border-b border-gray-700 text-left">
-              <button class="bg-blue-500 text-white px-4 py-2 rounded hover:bg-blue-700 transform hover:scale-105 transition duration-300">编辑 ✏️</button>
-              <button class="bg-red-500 text-white px-4 py-2 rounded hover:bg-red-700 transform hover:scale-105 transition duration-300">删除 🗑️</button>
+              <button @click="deleteRule(rule)" class="bg-red-500 text-white px-4 py-2 rounded hover:bg-red-700 transform hover:scale-105 transition duration-300 ml-2">删除 🗑️</button>
             </td>
           </tr>
           </tbody>
@@ -49,8 +39,15 @@
             <input v-model="newRule.name" class="shadow appearance-none border-2 border-gray-700 rounded w-full py-2 px-3 bg-gray-900 text-white leading-tight focus:outline-none focus:shadow-outline focus:border-blue-500 transition duration-300" id="ruleName" type="text" placeholder="输入规则名称">
           </div>
           <div class="mb-4">
-            <label class="block text-gray-300 text-sm font-bold mb-2" for="description">描述</label>
-            <textarea v-model="newRule.description" class="shadow appearance-none border-2 border-gray-700 rounded w-full py-2 px-3 bg-gray-900 text-white leading-tight focus:outline-none focus:shadow-outline focus:border-blue-500 transition duration-300" id="description" placeholder="输入规则描述"></textarea>
+            <label class="block text-gray-300 text-sm font-bold mb-2" for="ruleRegex">规则正则</label>
+            <input v-model="newRule.regex" class="shadow appearance-none border-2 border-gray-700 rounded w-full py-2 px-3 bg-gray-900 text-white leading-tight focus:outline-none focus:shadow-outline focus:border-blue-500 transition duration-300" id="ruleRegex" type="text" placeholder="输入规则正则">
+          </div>
+          <div class="mb-4">
+            <label class="block text-gray-300 text-sm font-bold mb-2" for="ruleMethod">HTTP 方法</label>
+            <select v-model="newRule.method" class="shadow appearance-none border-2 border-gray-700 rounded w-full py-2 px-3 bg-gray-900 text-white leading-tight focus:outline-none focus:shadow-outline focus:border-blue-500 transition duration-300" id="ruleMethod">
+              <option value="GET">GET</option>
+              <option value="POST">POST</option>
+            </select>
           </div>
           <div class="flex items-center justify-between">
             <button class="bg-green-500 text-white px-4 py-2 rounded hover:bg-green-700 transform hover:scale-105 transition duration-300" type="submit">
@@ -68,7 +65,7 @@
 
 <script>
 import { ref, onMounted } from 'vue';
-import axios from 'axios';
+import api from '../api/axiosInstance'; // 导入配置好的 Axios 实例
 import HeaderPage from './HeaderPage.vue';
 import FooterPage from './FooterPage.vue';
 
@@ -79,31 +76,47 @@ export default {
     FooterPage
   },
   setup() {
-    const urlPatterns = ref([]);
-    const bodyPatterns = ref([]);
-    const newRule = ref({ name: '', description: '' });
+    const rules = ref([]);
+    const newRule = ref({ name: '', regex: '', method: 'GET' });
 
     const fetchRules = async () => {
       try {
-        const response = await axios.get('http://172.20.2.226:8081/interception-rules');
-        urlPatterns.value = response.data.URLPatterns;
-        bodyPatterns.value = response.data.BodyPatterns;
+        const response = await api.get('/interception-rules'); // 使用 Axios 实例
+        rules.value = response.data.rules || [];
       } catch (error) {
         console.error('获取规则失败:', error);
       }
     };
 
     const addRule = async () => {
-      // 这里可以实现添加规则的后端接口
-      console.log('添加规则:', newRule.value);
-      newRule.value = { name: '', description: '' }; // 清空表单
+      try {
+        await api.post('/interception-rules', newRule.value); // 使用 Axios 实例
+        await fetchRules(); // 重新获取规则列表
+        newRule.value = { name: '', regex: '', method: 'GET' }; // 清空表单
+      } catch (error) {
+        console.error('添加规则失败:', error);
+      }
+    };
+
+    const deleteRule = async (rule) => {
+      try {
+        await api.delete(`/interception-rules/${rule.name}`); // 使用 Axios 实例
+        await fetchRules(); // 重新获取规则列表
+      } catch (error) {
+        console.error('删除规则失败:', error);
+      }
     };
 
     onMounted(() => {
       fetchRules();
     });
 
-    return { urlPatterns, bodyPatterns, newRule, addRule };
+    return {
+      rules,
+      newRule,
+      addRule,
+      deleteRule
+    };
   }
 };
 </script>

@@ -89,12 +89,6 @@
         </div>
       </div>
 
-      <!-- 保存黑白名单配置 -->
-      <div class="flex justify-end mt-6">
-        <button @click="saveIPControlRules" class="bg-teal-500 text-white px-6 py-3 rounded-lg hover:bg-teal-700 transform hover:scale-105 transition duration-300">
-          保存黑白名单配置 💾
-        </button>
-      </div>
     </div>
 
     <!-- 页脚 -->
@@ -104,7 +98,7 @@
 
 <script>
 import { ref, onMounted } from 'vue';
-import axios from 'axios';
+import api from '../api/axiosInstance'; // 导入 Axios 实例
 import HeaderPage from './HeaderPage.vue';
 import FooterPage from './FooterPage.vue';
 
@@ -122,46 +116,64 @@ export default {
 
     const fetchData = async () => {
       try {
-        const response = await axios.get('http://172.20.2.226:8081/ip-control-rules');
+        const response = await api.get('/ip-control-rules');
         const data = response.data;
-        whitelist.value = data.Whitelist;
-        blacklist.value = data.Blacklist;
+        whitelist.value = data.Whitelist || [];
+        blacklist.value = data.Blacklist || [];
       } catch (error) {
         console.error('请求失败:', error);
       }
     };
 
-    const addToWhitelist = () => {
+    const addToWhitelist = async () => {
       if (newWhitelistIP.value && !whitelist.value.includes(newWhitelistIP.value)) {
-        whitelist.value.push(newWhitelistIP.value);
-        newWhitelistIP.value = '';
+        try {
+          await api.post('/ip-control-rules', {
+            ip: newWhitelistIP.value,
+            type: 'whitelist'
+          });
+          whitelist.value.push(newWhitelistIP.value);
+          newWhitelistIP.value = '';
+          await fetchData(); // 重新获取最新数据
+        } catch (error) {
+          console.error('添加到白名单失败:', error);
+        }
       }
     };
 
-    const addToBlacklist = () => {
+    const addToBlacklist = async () => {
       if (newBlacklistIP.value && !blacklist.value.includes(newBlacklistIP.value)) {
-        blacklist.value.push(newBlacklistIP.value);
-        newBlacklistIP.value = '';
+        try {
+          await api.post('/ip-control-rules', {
+            ip: newBlacklistIP.value,
+            type: 'blacklist'
+          });
+          blacklist.value.push(newBlacklistIP.value);
+          newBlacklistIP.value = '';
+          await fetchData(); // 重新获取最新数据
+        } catch (error) {
+          console.error('添加到黑名单失败:', error);
+        }
       }
     };
 
-    const removeFromWhitelist = (ip) => {
-      whitelist.value = whitelist.value.filter(item => item !== ip);
-    };
-
-    const removeFromBlacklist = (ip) => {
-      blacklist.value = blacklist.value.filter(item => item !== ip);
-    };
-
-    const saveIPControlRules = async () => {
+    const removeFromWhitelist = async (ip) => {
       try {
-        await axios.post('http://172.20.2.226:8081/ip-control-rules', {
-          Whitelist: whitelist.value,
-          Blacklist: blacklist.value
-        });
-        alert('黑白名单配置已保存');
+        await api.delete(`/ip-control-rules/${ip}`);
+        whitelist.value = whitelist.value.filter(item => item !== ip);
+        await fetchData(); // 重新获取最新数据
       } catch (error) {
-        console.error('保存配置失败:', error);
+        console.error('从白名单移除失败:', error);
+      }
+    };
+
+    const removeFromBlacklist = async (ip) => {
+      try {
+        await api.delete(`/ip-control-rules/${ip}`);
+        blacklist.value = blacklist.value.filter(item => item !== ip);
+        await fetchData(); // 重新获取最新数据
+      } catch (error) {
+        console.error('从黑名单移除失败:', error);
       }
     };
 
@@ -169,7 +181,16 @@ export default {
       fetchData();
     });
 
-    return { whitelist, blacklist, newWhitelistIP, newBlacklistIP, addToWhitelist, addToBlacklist, removeFromWhitelist, removeFromBlacklist, saveIPControlRules };
+    return {
+      whitelist,
+      blacklist,
+      newWhitelistIP,
+      newBlacklistIP,
+      addToWhitelist,
+      addToBlacklist,
+      removeFromWhitelist,
+      removeFromBlacklist,
+    };
   }
 };
 </script>

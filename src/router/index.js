@@ -8,6 +8,7 @@ import LoginPage from '@/components/LoginPage.vue'
 import SystemConfiguration from '@/components/SystemConfiguration.vue'
 import UserManagement from '@/components/UserManagement.vue'
 import WAFDashboard from '@/components/WAFDashboard.vue'
+import GoogleAuthQRCode from "@/components/GoogleAuthQRCode.vue";
 
 const routes = [
     {
@@ -46,6 +47,11 @@ const routes = [
         component: UserManagement
     },
     {
+        path: '/setup-2fa',
+        name: 'Setup2FA',
+        component: GoogleAuthQRCode
+    },
+    {
         path: '/dashboard',
         name: 'WAFDashboard',
         component: WAFDashboard
@@ -57,13 +63,15 @@ const router = createRouter({
     routes
 })
 
-router.beforeEach((to, from, next) => {
-    const isAuthenticated = store.state.isAuthenticated
-    if (!isAuthenticated && to.name !== 'LoginPage' && to.name !== 'Home') {
-        next({ name: 'Home' })
+router.beforeEach(async (to, from, next) => {
+    await store.dispatch('checkAuth'); // 确保最新的认证状态
+
+    const isAuthenticated = store.state.isAuthenticated;
+    if (!isAuthenticated && to.name !== 'LoginPage' && to.name !== 'Home' && to.name !== 'Setup2FA') {
+        next({ name: 'Home' });
     } else {
-        next()
+        next();
     }
-})
+});
 
 export default router

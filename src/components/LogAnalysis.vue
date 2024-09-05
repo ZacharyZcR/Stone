@@ -83,7 +83,7 @@
 
 <script>
 import { ref } from 'vue';
-import axios from 'axios';
+import api from '../api/axiosInstance'; // 导入配置好的 Axios 实例
 import HeaderPage from './HeaderPage.vue';
 import FooterPage from './FooterPage.vue';
 
@@ -115,7 +115,7 @@ export default {
           endDateTime: formatToRFC3339(filters.value.endDateTime),
           ip: filters.value.ip
         };
-        const response = await axios.get('http://172.20.2.226:8081/logs', { params });
+        const response = await api.get('/logs', { params }); // 使用 Axios 实例
         logs.value = response.data;
       } catch (error) {
         console.error('获取日志失败:', error);
