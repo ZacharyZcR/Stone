@@ -3,21 +3,31 @@
     <div class="container mx-auto flex justify-between items-center">
       <div class="text-2xl font-bold text-white">🔒 Stone ⛰️ WAF 管理面板</div>
       <div class="space-x-4">
-        <router-link v-if="!isAuthenticated" to="/login" v-slot="{ navigate }">
-          <button
-              @click="navigate"
-              class="text-white hover:text-yellow-400 transition duration-300 transform hover:scale-105"
-          >
-            登录 🔐
-          </button>
-        </router-link>
+        <template v-if="!isAuthenticated">
+          <router-link to="/login" v-slot="{ navigate }">
+            <button
+                @click="navigate"
+                class="text-white hover:text-yellow-400 transition duration-300 transform hover:scale-105"
+            >
+              登录 🔐
+            </button>
+          </router-link>
+          <router-link to="/setup-2fa" v-slot="{ navigate }">
+            <button
+                @click="navigate"
+                class="text-white hover:text-yellow-400 transition duration-300 transform hover:scale-105"
+            >
+              注册 📱
+            </button>
+          </router-link>
+        </template>
         <template v-else>
           <router-link to="/" v-slot="{ navigate }">
             <button
                 @click="navigate"
                 class="text-white hover:text-yellow-400 transition duration-300 transform hover:scale-105"
             >
-              仪表盘 📊
+              主页 🏠
             </button>
           </router-link>
           <router-link to="/attacker-profile" v-slot="{ navigate }">
@@ -69,7 +79,7 @@
             </button>
           </router-link>
           <button
-              @click="logout"
+              @click="handleLogout"
               class="text-white hover:text-yellow-400 transition duration-300 transform hover:scale-105"
           >
             登出 🚪
@@ -77,19 +87,58 @@
         </template>
       </div>
     </div>
+
+    <!-- 添加 PopupNotification 组件 -->
+    <PopupNotification
+        v-if="showNotification"
+        :message="notificationMessage"
+        :emoji="notificationEmoji"
+        :type="notificationType"
+        @close="showNotification = false"
+    />
   </nav>
 </template>
 
 <script>
-import { mapState, mapActions } from 'vuex'
+import { ref, computed } from 'vue'
+import { useRouter } from 'vue-router'
+import { useStore } from 'vuex'
+import PopupNotification from './PopupNotification.vue'
 
 export default {
   name: 'HeaderPage',
-  computed: {
-    ...mapState(['isAuthenticated'])
+  components: {
+    PopupNotification
   },
-  methods: {
-    ...mapActions(['logout'])
+  setup() {
+    const router = useRouter()
+    const store = useStore()
+
+    const showNotification = ref(false)
+    const notificationMessage = ref('')
+    const notificationEmoji = ref('')
+    const notificationType = ref('success')
+
+    const handleLogout = async () => {
+      await store.dispatch('logout')
+      notificationMessage.value = '登出成功！期待您的再次访问！'
+      notificationEmoji.value = '👋'
+      notificationType.value = 'success'
+      showNotification.value = true
+
+      setTimeout(() => {
+        router.push({ name: 'Home' })
+      }, 1500) // 延迟1.5秒后跳转到登录页面
+    }
+
+    return {
+      isAuthenticated: computed(() => store.state.isAuthenticated),
+      handleLogout,
+      showNotification,
+      notificationMessage,
+      notificationEmoji,
+      notificationType
+    }
   }
 }
 </script>

@@ -37,6 +37,15 @@
         </div>
       </form>
     </div>
+
+    <!-- 弹窗组件 -->
+    <PopupNotification
+        v-if="showNotification"
+        :message="notificationMessage"
+        :emoji="notificationEmoji"
+        :type="notificationType"
+        @close="showNotification = false"
+    />
   </div>
 </template>
 
@@ -44,32 +53,57 @@
 import { ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { useStore } from 'vuex'
+import PopupNotification from './PopupNotification.vue'
 
 export default {
   name: 'LoginPage',
+  components: {
+    PopupNotification
+  },
   setup() {
     const account = ref('')
     const code = ref('')
     const router = useRouter()
     const store = useStore()
 
+    const showNotification = ref(false)
+    const notificationMessage = ref('')
+    const notificationEmoji = ref('')
+    const notificationType = ref('success')
+
     const handleLogin = async () => {
-      const success = await store.dispatch('login', {
-        account: account.value,
-        code: code.value
-      })
-      if (success) {
-        router.push({ name: 'Home' })
-      } else {
-        // 显示错误消息
-        alert('登录失败，请检查您的验证码和账户信息。')
+      try {
+        const success = await store.dispatch('login', {
+          account: account.value,
+          code: code.value
+        })
+        if (success) {
+          notificationMessage.value = '登录成功！欢迎回来！'
+          notificationEmoji.value = '🎉'
+          notificationType.value = 'success'
+          showNotification.value = true
+          setTimeout(() => {
+            router.push({ name: 'Home' })
+          }, 1500) // 延迟1.5秒后跳转，让用户有时间看到成功消息
+        } else {
+          throw new Error('登录失败')
+        }
+      } catch (error) {
+        notificationMessage.value = '登录失败，请检查您的验证码和账户信息。'
+        notificationEmoji.value = '❌'
+        notificationType.value = 'error'
+        showNotification.value = true
       }
     }
 
     return {
       account,
       code,
-      handleLogin
+      handleLogin,
+      showNotification,
+      notificationMessage,
+      notificationEmoji,
+      notificationType
     }
   }
 }
