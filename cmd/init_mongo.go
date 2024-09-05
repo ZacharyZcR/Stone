@@ -1,5 +1,3 @@
-// cmd/init_mongo.go
-
 package main
 
 import (
@@ -34,6 +32,10 @@ func main() {
 			"mode":          "main",
 			"rulesfile":     "pkg/rules/rules.yaml",
 			"targetaddress": "localhost:80",
+		},
+		"secrets": bson.M{
+			"sessionSecret": "YourSessionSecretHere",
+			"jwtSecret":     "YourJWTSecretHere",
 		},
 	}
 

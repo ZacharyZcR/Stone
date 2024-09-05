@@ -2,6 +2,7 @@ package main
 
 import (
 	"Stone/pkg/api"
+	"Stone/pkg/api/handlers"
 	"Stone/pkg/capture"
 	"Stone/pkg/config"
 	"Stone/pkg/logging"
@@ -36,10 +37,12 @@ func main() {
 
 	configCollection := client.Database("stoneDB").Collection("config")
 	rulesCollection := client.Database("stoneDB").Collection("rules")
+	totpCollection := client.Database("stoneDB").Collection("totp")
 
 	// 设置集合
 	config.SetMongoCollection(configCollection)
 	rules.SetMongoCollection(rulesCollection)
+	handlers.SetTOTPCollection(totpCollection)
 
 	// 从MongoDB加载配置
 	cfg, err := config.LoadConfig(context.Background())
@@ -73,7 +76,7 @@ func main() {
 		}
 	}()
 
-	router := api.SetupRouter()
+	router := api.SetupRouter(configCollection)
 	if err := router.Run(":8081"); err != nil {
 		log.Fatalf("启动API服务失败: %v", err)
 	}
