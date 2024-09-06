@@ -15,7 +15,7 @@ import (
 )
 
 // SetupRouter 设置API路由
-func SetupRouter(configCollection *mongo.Collection) *gin.Engine {
+func SetupRouter(configCollection *mongo.Collection, userCollection *mongo.Collection) *gin.Engine {
 	router := gin.Default()
 
 	// 配置CORS中间件
@@ -49,7 +49,7 @@ func SetupRouter(configCollection *mongo.Collection) *gin.Engine {
 	router.GET("/auth/check", handlers.CheckAuth(configResult.Secrets.JWTSecret))
 
 	router.GET("/auth/qrcode", handlers.GenerateQRCode)
-	router.POST("/auth/validate", handlers.ValidateTOTP)
+	router.POST("/auth/validate", handlers.ValidateTOTP(configResult.Secrets.JWTSecret))
 
 	// 使用中间件进行鉴权
 	authenticated := router.Group("/")
@@ -73,6 +73,16 @@ func SetupRouter(configCollection *mongo.Collection) *gin.Engine {
 
 		// 日志查看API
 		authenticated.GET("/logs", handlers.GetLogs)
+
+		// 控制二维码接口状态的API
+		authenticated.GET("/auth/qrcode/status", handlers.SetQRCodeStatus)
+		authenticated.POST("/auth/qrcode/status", handlers.SetQRCodeStatus)
+
+		// 用户管理API
+		authenticated.GET("/users", handlers.HandleUsers)
+		authenticated.GET("/users/:account", handlers.HandleUsers)
+		authenticated.POST("/users", handlers.HandleUsers)
+		authenticated.DELETE("/users/:account", handlers.HandleUsers)
 	}
 
 	return router

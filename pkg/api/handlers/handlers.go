@@ -16,14 +16,16 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/mongo"
+	"go.mongodb.org/mongo-driver/mongo/options"
 	"image/png"
 	"math/big"
 	"net/http"
-	"os"
 	"runtime"
 	"strings"
 	"time"
 )
+
+var qrcodeEnabled = true // 默认开启
 
 // GetStatus 获取系统状态
 func GetStatus(c *gin.Context) {
@@ -201,6 +203,11 @@ func generateRandomString(length int) (string, error) {
 
 // GenerateQRCode 生成二维码并返回给客户端
 func GenerateQRCode(c *gin.Context) {
+	if !qrcodeEnabled {
+		c.JSON(http.StatusForbidden, gin.H{"error": "二维码接口已关闭"})
+		return
+	}
+
 	// 生成一个随机的账户名称
 	accountName, err := generateRandomString(16)
 	if err != nil {
@@ -246,45 +253,73 @@ func GenerateQRCode(c *gin.Context) {
 }
 
 // ValidateTOTP 验证用户输入的TOTP代码
-func ValidateTOTP(c *gin.Context) {
-	var request struct {
-		Code    string `json:"code" binding:"required"`
-		Account string `json:"account" binding:"required"`
-	}
+func ValidateTOTP(jwtSecret string) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		var request struct {
+			Code    string `json:"code" binding:"required"`
+			Account string `json:"account" binding:"required"`
+		}
 
-	if err := c.ShouldBindJSON(&request); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "验证码和账户是必需的"})
-		return
-	}
-
-	// 从MongoDB中获取存储的密钥
-	var result struct {
-		Secret string `bson:"secret"`
-	}
-	err := totpCollection.FindOne(context.Background(), bson.M{"account": request.Account}).Decode(&result)
-	if err != nil {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "无法找到密钥"})
-		return
-	}
-
-	// 验证用户输入的TOTP代码
-	if totp.Validate(request.Code, result.Secret) {
-		// 生成JWT
-		token := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.MapClaims{
-			"account": request.Account,
-			"exp":     time.Now().Add(time.Hour * 72).Unix(), // 3天有效期
-		})
-
-		// 使用环境变量中的密钥签名JWT
-		tokenString, err := token.SignedString([]byte(os.Getenv("JWT_SECRET")))
-		if err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"error": "无法生成令牌"})
+		if err := c.ShouldBindJSON(&request); err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "验证码和账户是必需的"})
 			return
 		}
 
-		c.JSON(http.StatusOK, gin.H{"status": "验证码有效", "token": tokenString})
-	} else {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "验证码无效"})
+		// 从MongoDB中获取存储的密钥和登录次数
+		var result struct {
+			Secret     string `bson:"secret"`
+			LoginCount int    `bson:"loginCount"`
+		}
+		err := totpCollection.FindOne(context.Background(), bson.M{"account": request.Account}).Decode(&result)
+		if err != nil {
+			c.JSON(http.StatusUnauthorized, gin.H{"error": "无法找到密钥"})
+			return
+		}
+
+		// 验证用户输入的TOTP代码
+		if totp.Validate(request.Code, result.Secret) {
+			// 更新登录次数
+			_, err := totpCollection.UpdateOne(
+				context.Background(),
+				bson.M{"account": request.Account},
+				bson.M{"$inc": bson.M{"loginCount": 1}},
+			)
+			if err != nil {
+				c.JSON(http.StatusInternalServerError, gin.H{"error": "无法更新登录次数"})
+				return
+			}
+
+			// 检查登录次数并加入到用户集合
+			if result.LoginCount+1 >= 1 {
+				_, err := userCollection.UpdateOne(
+					context.Background(),
+					bson.M{"account": request.Account},
+					bson.M{"$set": bson.M{"account": request.Account, "loginCount": result.LoginCount + 1}},
+					options.Update().SetUpsert(true), // 如果用户不存在则插入
+				)
+				if err != nil {
+					c.JSON(http.StatusInternalServerError, gin.H{"error": "无法更新用户集合"})
+					return
+				}
+			}
+
+			// 生成JWT
+			token := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.MapClaims{
+				"account": request.Account,
+				"exp":     time.Now().Add(time.Hour * 72).Unix(), // 3天有效期
+			})
+
+			// 使用从配置加载的密钥签名JWT
+			tokenString, err := token.SignedString([]byte(jwtSecret))
+			if err != nil {
+				c.JSON(http.StatusInternalServerError, gin.H{"error": "无法生成令牌"})
+				return
+			}
+
+			c.JSON(http.StatusOK, gin.H{"status": "验证码有效", "token": tokenString, "loginCount": result.LoginCount + 1})
+		} else {
+			c.JSON(http.StatusUnauthorized, gin.H{"error": "验证码无效"})
+		}
 	}
 }
 
@@ -324,5 +359,103 @@ func CheckAuth(jwtSecret string) gin.HandlerFunc {
 		} else {
 			c.JSON(http.StatusUnauthorized, gin.H{"authenticated": false, "error": "无效的令牌"})
 		}
+	}
+}
+
+// SetQRCodeStatus 设置或查询二维码接口的状态
+func SetQRCodeStatus(c *gin.Context) {
+	if c.Request.Method == http.MethodGet {
+		// 返回当前二维码接口的状态
+		c.JSON(http.StatusOK, gin.H{"enabled": qrcodeEnabled})
+		return
+	}
+
+	if c.Request.Method == http.MethodPost {
+		var request struct {
+			Enabled bool `json:"enabled"`
+		}
+
+		if err := c.ShouldBindJSON(&request); err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "请求格式错误"})
+			return
+		}
+
+		qrcodeEnabled = request.Enabled
+		c.JSON(http.StatusOK, gin.H{"status": "二维码接口状态已更新", "enabled": qrcodeEnabled})
+	}
+}
+
+// 假设 userCollection 是一个已初始化的 MongoDB 集合
+var userCollection *mongo.Collection
+
+type User struct {
+	Account    string `bson:"account" json:"account"`
+	LoginCount int    `bson:"loginCount" json:"loginCount"`
+}
+
+// SetUserCollection 设置用户集合
+func SetUserCollection(collection *mongo.Collection) {
+	userCollection = collection
+}
+
+// HandleUsers 处理用户的CRUD操作
+func HandleUsers(c *gin.Context) {
+	switch c.Request.Method {
+	case http.MethodGet:
+		account := c.Param("account")
+		if account == "" {
+			// 获取所有用户
+			cursor, err := userCollection.Find(context.Background(), bson.M{})
+			if err != nil {
+				c.JSON(http.StatusInternalServerError, gin.H{"error": "无法获取用户"})
+				return
+			}
+			defer cursor.Close(context.Background())
+
+			var users []User
+			if err := cursor.All(context.Background(), &users); err != nil {
+				c.JSON(http.StatusInternalServerError, gin.H{"error": "无法解析用户数据"})
+				return
+			}
+			c.JSON(http.StatusOK, users)
+		} else {
+			// 获取特定用户
+			var user User
+			err := userCollection.FindOne(context.Background(), bson.M{"account": account}).Decode(&user)
+			if err != nil {
+				c.JSON(http.StatusNotFound, gin.H{"error": "用户未找到"})
+				return
+			}
+			c.JSON(http.StatusOK, user)
+		}
+
+	case http.MethodPost:
+		var newUser User
+		if err := c.ShouldBindJSON(&newUser); err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "请求格式错误"})
+			return
+		}
+		_, err := userCollection.InsertOne(context.Background(), newUser)
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "无法添加用户"})
+			return
+		}
+		c.JSON(http.StatusCreated, gin.H{"status": "用户已添加"})
+
+	case http.MethodDelete:
+		account := c.Param("account")
+		if account == "" {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "需要提供用户名"})
+			return
+		}
+		_, err := userCollection.DeleteOne(context.Background(), bson.M{"account": account})
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "无法删除用户"})
+			return
+		}
+		c.JSON(http.StatusOK, gin.H{"status": "用户已删除"})
+
+	default:
+		c.JSON(http.StatusMethodNotAllowed, gin.H{"error": "不支持的方法"})
 	}
 }
