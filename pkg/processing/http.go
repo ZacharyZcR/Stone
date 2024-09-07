@@ -3,6 +3,7 @@
 package processing
 
 import (
+	"Stone/pkg/monitoring"
 	"Stone/pkg/rules"
 	"Stone/pkg/utils"
 	"bufio"
@@ -41,6 +42,7 @@ func HandleHTTPConnection(clientConn net.Conn, targetAddress string) {
 		if !allowed {
 			fmt.Printf("IP在黑名单中，连接已阻断: %s\n", clientIP)
 			utils.LogTraffic(clientIP, targetAddress, request.URL.String(), request.Method, request.Header, "", "IP在黑名单中")
+			monitoring.BlockedByBlacklistTotal.Inc()
 			return
 		}
 
@@ -48,6 +50,7 @@ func HandleHTTPConnection(clientConn net.Conn, targetAddress string) {
 		if !inWhitelist && !rules.CheckRequest(request) {
 			fmt.Println("检测到危险请求，连接已阻断")
 			utils.LogTraffic(clientIP, targetAddress, request.URL.String(), request.Method, request.Header, "", "Blocked by rules")
+			monitoring.BlockedByRulesTotal.Inc()
 			return
 		}
 
@@ -72,7 +75,8 @@ func HandleHTTPConnection(clientConn net.Conn, targetAddress string) {
 			return
 		}
 
-		// 请求成功
+		// 请求成功，更新访问计数
+		monitoring.WebsiteRequestsTotal.WithLabelValues("success").Inc()
 		utils.LogTraffic(clientIP, targetAddress, request.URL.String(), request.Method, request.Header, "", "")
 
 		// 关闭响应体
