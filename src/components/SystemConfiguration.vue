@@ -1,195 +1,236 @@
 <template>
   <div class="bg-gray-900 text-white flex flex-col min-h-screen">
-    <!-- 顶部导航栏 -->
     <HeaderPage />
 
-    <!-- 主体内容 -->
     <div class="container mx-auto px-4 py-8 flex-1 mt-16">
-      <!-- 配置表单 -->
-      <div class="bg-gray-800 p-6 rounded-lg shadow-md transform transition-all duration-500 hover:shadow-2xl animate-fade-in-up mb-8">
-        <h2 class="text-2xl font-bold mb-4">系统配置设置 ⚙️</h2>
-        <form>
-          <div class="mb-4">
-            <label class="block text-gray-300 text-sm font-bold mb-2 hover:text-teal-400 transition duration-300" for="firewallStatus">防火墙状态</label>
-            <select class="shadow appearance-none border-2 border-gray-700 rounded w-full py-2 px-3 bg-gray-900 text-white leading-tight focus:outline-none focus:shadow-outline focus:border-teal-500 transition duration-300" id="firewallStatus">
-              <option>启用 ✅</option>
-              <option>禁用 ❌</option>
-            </select>
-          </div>
-          <div class="mb-4">
-            <label class="block text-gray-300 text-sm font-bold mb-2 hover:text-teal-400 transition duration-300" for="logLevel">日志级别</label>
-            <select class="shadow appearance-none border-2 border-gray-700 rounded w-full py-2 px-3 bg-gray-900 text-white leading-tight focus:outline-none focus:shadow-outline focus:border-teal-500 transition duration-300" id="logLevel">
-              <option>详细 📋</option>
-              <option>普通 📄</option>
-              <option>简略 🗒️</option>
-            </select>
-          </div>
-          <div class="mb-4">
-            <label class="block text-gray-300 text-sm font-bold mb-2 hover:text-teal-400 transition duration-300" for="alertEmail">警报邮箱</label>
-            <input class="shadow appearance-none border-2 border-gray-700 rounded w-full py-2 px-3 bg-gray-900 text-white leading-tight focus:outline-none focus:shadow-outline focus:border-teal-500 transition duration-300" id="alertEmail" type="email" placeholder="输入警报接收邮箱 📧">
-          </div>
-          <div class="flex items-center justify-between">
-            <button class="bg-teal-500 text-white px-4 py-2 rounded hover:bg-teal-700 transform hover:scale-105 transition duration-300" type="button">
-              保存配置 💾
-            </button>
-          </div>
-        </form>
+      <!-- 系统运行信息 -->
+      <div class="bg-gray-800 p-6 rounded-lg shadow-md mb-8">
+        <h2 class="text-2xl font-bold mb-6">系统运行信息 📊</h2>
+        <div v-if="statusInfo" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+          <StatusCard v-for="(value, key) in statusInfo" :key="key" :title="formatTitle(key)" :value="formatValue(key, value)" />
+        </div>
+        <div v-else class="text-center py-8">
+          <p class="text-xl">加载中... ⏳</p>
+        </div>
       </div>
 
-      <!-- 黑名单和白名单 -->
-      <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+      <!-- 黑白名单 -->
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
         <!-- 黑名单 IP 列表 -->
-        <div class="bg-gray-800 p-6 rounded-lg shadow-md">
-          <h2 class="text-2xl font-bold mb-6">黑名单 IP 列表 🚫</h2>
-          <div class="mb-6 flex">
-            <input v-model="newBlacklistIP" class="shadow appearance-none border-2 border-gray-700 rounded w-full py-3 px-4 bg-gray-900 text-white leading-tight focus:outline-none focus:shadow-outline focus:border-red-500 transition duration-300" placeholder="添加 IP 到黑名单">
-            <button @click="addToBlacklist" class="bg-red-500 text-white px-6 py-3 rounded-lg hover:bg-red-700 ml-3 transform hover:scale-105 transition duration-300">添加 ➕</button>
-          </div>
-          <table class="min-w-full bg-gray-800">
-            <thead>
-            <tr>
-              <th class="py-3 px-4 border-b-2 border-gray-700 text-left">IP 地址</th>
-              <th class="py-3 px-4 border-b-2 border-gray-700 text-left">操作</th>
-            </tr>
-            </thead>
-            <tbody>
-            <tr v-for="ip in blacklist" :key="ip" class="hover:bg-gray-700 transition duration-300">
-              <td class="py-3 px-4 border-b border-gray-700 text-left">{{ ip }}</td>
-              <td class="py-3 px-4 border-b border-gray-700 text-left">
-                <button @click="removeFromBlacklist(ip)" class="bg-red-500 text-white px-4 py-2 rounded-lg hover:bg-red-700 transform hover:scale-105 transition duration-300">移除 🗑️</button>
-              </td>
-            </tr>
-            </tbody>
-          </table>
-        </div>
+        <IPList title="黑名单 IP 列表 🚫" :list="blacklist" @add="addToBlacklist" @remove="removeFromBlacklist" />
 
         <!-- 白名单 IP 列表 -->
-        <div class="bg-gray-800 p-6 rounded-lg shadow-md">
-          <h2 class="text-2xl font-bold mb-6">白名单 IP 列表 ✅</h2>
-          <div class="mb-6 flex">
-            <input v-model="newWhitelistIP" class="shadow appearance-none border-2 border-gray-700 rounded w-full py-3 px-4 bg-gray-900 text-white leading-tight focus:outline-none focus:shadow-outline focus:border-blue-500 transition duration-300" placeholder="添加 IP 到白名单">
-            <button @click="addToWhitelist" class="bg-blue-500 text-white px-6 py-3 rounded-lg hover:bg-blue-700 ml-3 transform hover:scale-105 transition duration-300">添加 ➕</button>
-          </div>
-          <table class="min-w-full bg-gray-800">
-            <thead>
-            <tr>
-              <th class="py-3 px-4 border-b-2 border-gray-700 text-left">IP 地址</th>
-              <th class="py-3 px-4 border-b-2 border-gray-700 text-left">操作</th>
-            </tr>
-            </thead>
-            <tbody>
-            <tr v-for="ip in whitelist" :key="ip" class="hover:bg-gray-700 transition duration-300">
-              <td class="py-3 px-4 border-b border-gray-700 text-left">{{ ip }}</td>
-              <td class="py-3 px-4 border-b border-gray-700 text-left">
-                <button @click="removeFromWhitelist(ip)" class="bg-blue-500 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transform hover:scale-105 transition duration-300">移除 🗑️</button>
-              </td>
-            </tr>
-            </tbody>
-          </table>
-        </div>
+        <IPList title="白名单 IP 列表 ✅" :list="whitelist" @add="addToWhitelist" @remove="removeFromWhitelist" />
       </div>
 
+      <!-- 刷新按钮 -->
+      <div class="text-center">
+        <button @click="fetchStatus" class="bg-blue-500 hover:bg-blue-600 text-white font-bold py-2 px-6 rounded-full transition duration-300 ease-in-out transform hover:scale-105">
+          刷新系统信息 🔄
+        </button>
+      </div>
     </div>
 
-    <!-- 页脚 -->
     <FooterPage />
+
+    <PopupNotification
+        v-if="showNotification"
+        :message="notificationMessage"
+        :emoji="notificationEmoji"
+        :type="notificationType"
+        @close="showNotification = false"
+    />
   </div>
 </template>
 
 <script>
 import { ref, onMounted } from 'vue';
-import api from '../api/axiosInstance'; // 导入 Axios 实例
+import api from '../api/axiosInstance';
 import HeaderPage from './HeaderPage.vue';
 import FooterPage from './FooterPage.vue';
+import PopupNotification from './PopupNotification.vue';
+import StatusCard from './StatusCard.vue';
+import IPList from './IPList.vue';
 
 export default {
-  name: 'SystemConfiguration',
+  name: 'SystemStatus',
   components: {
     HeaderPage,
-    FooterPage
+    FooterPage,
+    PopupNotification,
+    StatusCard,
+    IPList
   },
   setup() {
+    const statusInfo = ref(null);
     const whitelist = ref([]);
     const blacklist = ref([]);
-    const newWhitelistIP = ref('');
-    const newBlacklistIP = ref('');
+    const showNotification = ref(false);
+    const notificationMessage = ref('');
+    const notificationEmoji = ref('');
+    const notificationType = ref('success');
 
-    const fetchData = async () => {
+    const showPopup = (message, emoji, type) => {
+      notificationMessage.value = message;
+      notificationEmoji.value = emoji;
+      notificationType.value = type;
+      showNotification.value = true;
+    };
+
+    const fetchStatus = async () => {
+      try {
+        const response = await api.get('/status');
+        statusInfo.value = response.data;
+        showPopup('系统信息已更新', '✅', 'success');
+      } catch (error) {
+        console.error('获取系统状态失败:', error);
+        showPopup('获取系统状态失败', '❌', 'error');
+      }
+    };
+
+    const fetchIPControlRules = async () => {
       try {
         const response = await api.get('/ip-control-rules');
-        const data = response.data;
-        whitelist.value = data.Whitelist || [];
-        blacklist.value = data.Blacklist || [];
+        whitelist.value = response.data.Whitelist;
+        blacklist.value = response.data.Blacklist;
       } catch (error) {
-        console.error('请求失败:', error);
+        console.error('获取IP控制规则失败:', error);
+        showPopup('获取IP控制规则失败', '❌', 'error');
       }
     };
 
-    const addToWhitelist = async () => {
-      if (newWhitelistIP.value && !whitelist.value.includes(newWhitelistIP.value)) {
-        try {
-          await api.post('/ip-control-rules', {
-            ip: newWhitelistIP.value,
-            type: 'whitelist'
-          });
-          whitelist.value.push(newWhitelistIP.value);
-          newWhitelistIP.value = '';
-          await fetchData(); // 重新获取最新数据
-        } catch (error) {
-          console.error('添加到白名单失败:', error);
-        }
+    const addToWhitelist = async (ip) => {
+      try {
+        await api.post('/ip-control-rules', { ip, type: 'whitelist' });
+        await fetchIPControlRules(); // 重新获取最新的 IP 列表
+        showPopup(`IP ${ip} 已添加到白名单`, '✅', 'success');
+      } catch (error) {
+        console.error('添加到白名单失败:', error);
+        showPopup(`添加 ${ip} 到白名单失败`, '❌', 'error');
       }
     };
 
-    const addToBlacklist = async () => {
-      if (newBlacklistIP.value && !blacklist.value.includes(newBlacklistIP.value)) {
-        try {
-          await api.post('/ip-control-rules', {
-            ip: newBlacklistIP.value,
-            type: 'blacklist'
-          });
-          blacklist.value.push(newBlacklistIP.value);
-          newBlacklistIP.value = '';
-          await fetchData(); // 重新获取最新数据
-        } catch (error) {
-          console.error('添加到黑名单失败:', error);
-        }
+    const addToBlacklist = async (ip) => {
+      try {
+        await api.post('/ip-control-rules', { ip, type: 'blacklist' });
+        await fetchIPControlRules(); // 重新获取最新的 IP 列表
+        showPopup(`IP ${ip} 已添加到黑名单`, '✅', 'success');
+      } catch (error) {
+        console.error('添加到黑名单失败:', error);
+        showPopup(`添加 ${ip} 到黑名单失败`, '❌', 'error');
       }
     };
 
     const removeFromWhitelist = async (ip) => {
       try {
         await api.delete(`/ip-control-rules/${ip}`);
-        whitelist.value = whitelist.value.filter(item => item !== ip);
-        await fetchData(); // 重新获取最新数据
+        await fetchIPControlRules(); // 重新获取最新的 IP 列表
+        showPopup(`IP ${ip} 已从白名单移除`, '✅', 'success');
       } catch (error) {
         console.error('从白名单移除失败:', error);
+        showPopup(`从白名单移除 ${ip} 失败`, '❌', 'error');
       }
     };
 
     const removeFromBlacklist = async (ip) => {
       try {
         await api.delete(`/ip-control-rules/${ip}`);
-        blacklist.value = blacklist.value.filter(item => item !== ip);
-        await fetchData(); // 重新获取最新数据
+        await fetchIPControlRules(); // 重新获取最新的 IP 列表
+        showPopup(`IP ${ip} 已从黑名单移除`, '✅', 'success');
       } catch (error) {
         console.error('从黑名单移除失败:', error);
+        showPopup(`从黑名单移除 ${ip} 失败`, '❌', 'error');
       }
     };
 
+    const formatTitle = (key) => {
+      const titles = {
+        status: '状态',
+        uptime: '运行时间',
+        cpu_usage_percent: 'CPU 使用率',
+        memory_usage: '内存使用率',
+        disk_usage: '磁盘使用率',
+        network_in: '网络入流量',
+        network_out: '网络出流量',
+        load_average: '平均负载',
+        open_file_desc: '打开文件描述符数',
+        threads: '线程数',
+        processes: '进程数'
+      };
+      return titles[key] || key;
+    };
+
+    const formatValue = (key, value) => {
+      switch (key) {
+        case 'cpu_usage_percent':
+        case 'memory_usage':
+        case 'disk_usage':
+          return value.toFixed(2) + '%';
+        case 'network_in':
+        case 'network_out':
+          return formatBytes(value);
+        case 'load_average':
+          return value.toFixed(2);
+        case 'uptime':
+          return formatUptime(value);
+        default:
+          return value;
+      }
+    };
+
+    const formatUptime = (uptimeString) => {
+      // 解析时间字符串
+      const regex = /(?:(\d+)h)?(?:(\d+)m)?(\d+(?:\.\d+)?)s/;
+      const match = uptimeString.match(regex);
+
+      if (!match) {
+        return uptimeString; // 如果格式不匹配，直接返回原字符串
+      }
+
+      const hours = parseInt(match[1] || '0');
+      const minutes = parseInt(match[2] || '0');
+      const seconds = Math.floor(parseFloat(match[3] || '0'));
+
+      const days = Math.floor(hours / 24);
+      const remainingHours = hours % 24;
+
+      let result = '';
+      if (days > 0) result += `${days}天 `;
+      if (remainingHours > 0) result += `${remainingHours}小时 `;
+      if (minutes > 0) result += `${minutes}分钟 `;
+      if (seconds > 0 || (days === 0 && remainingHours === 0 && minutes === 0)) result += `${seconds}秒`;
+
+      return result.trim();
+    };
+
+    const formatBytes = (bytes) => {
+      if (bytes === 0) return '0 Bytes';
+      const k = 1024;
+      const sizes = ['Bytes', 'KB', 'MB', 'GB', 'TB'];
+      const i = Math.floor(Math.log(bytes) / Math.log(k));
+      return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+    };
+
     onMounted(() => {
-      fetchData();
+      fetchStatus();
+      fetchIPControlRules();
     });
 
     return {
+      statusInfo,
       whitelist,
       blacklist,
-      newWhitelistIP,
-      newBlacklistIP,
+      fetchStatus,
       addToWhitelist,
       addToBlacklist,
       removeFromWhitelist,
       removeFromBlacklist,
+      formatTitle,
+      formatValue,
+      showNotification,
+      notificationMessage,
+      notificationEmoji,
+      notificationType
     };
   }
 };
