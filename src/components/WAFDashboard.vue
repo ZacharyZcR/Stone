@@ -39,11 +39,10 @@
         </div>
       </div>
 
-      <!-- 图表占位符 -->
       <div class="bg-gray-800 p-6 rounded-lg shadow-md mb-8">
-        <h2 class="text-2xl font-bold mb-4">流量分析图表</h2>
-        <div class="h-64 bg-gray-700 flex items-center justify-center animate-pulse">
-          <span class="text-gray-400">图表占位符 📊</span>
+        <h2 class="text-2xl font-bold mb-4">最近7天流量分析</h2>
+        <div class="h-80"> <!-- 增加高度 -->
+          <BarChart :chartData="chartData" :chartOptions="chartOptions" />
         </div>
       </div>
 
@@ -68,16 +67,18 @@
 </template>
 
 <script>
-import { ref, onMounted } from 'vue'
+import { ref, onMounted, computed } from 'vue'
 import HeaderPage from './HeaderPage.vue'
 import FooterPage from './FooterPage.vue'
+import BarChart from './BarChart.vue'
 import api from '../api/axiosInstance'
 
 export default {
   name: 'WAFDashboard',
   components: {
     HeaderPage,
-    FooterPage
+    FooterPage,
+    BarChart
   },
   setup() {
     const metrics = ref({
@@ -133,16 +134,123 @@ export default {
       ]
     }
 
+    const weeklyMetrics = ref([])
+
+    const fetchWeeklyMetrics = async () => {
+      try {
+        const endDate = new Date()
+        const startDate = new Date(endDate)
+        startDate.setDate(startDate.getDate() - 6)
+
+        const response = await api.get('/firewall/metrics', {
+          params: {
+            start_date: startDate.toISOString().split('T')[0],
+            end_date: endDate.toISOString().split('T')[0]
+          }
+        })
+        weeklyMetrics.value = response.data
+      } catch (error) {
+        console.error('获取每周指标失败:', error)
+      }
+    }
+
+    const chartData = computed(() => {
+      // 确保 weeklyMetrics 不为空
+      if (weeklyMetrics.value.length === 0) {
+        return {
+          labels: [],
+          datasets: []
+        }
+      }
+
+      const labels = weeklyMetrics.value.map(m => m.date)
+      const datasets = [
+        {
+          label: '成功请求',
+          backgroundColor: 'rgba(16, 185, 129, 0.7)', // 半透明绿色
+          borderColor: '#10B981',
+          borderWidth: 2,
+          data: weeklyMetrics.value.map(m => m.success_requests)
+        },
+        {
+          label: '黑名单请求',
+          backgroundColor: 'rgba(239, 68, 68, 0.7)', // 半透明红色
+          borderColor: '#EF4444',
+          borderWidth: 2,
+          data: weeklyMetrics.value.map(m => m.blacklist_requests)
+        },
+        {
+          label: '规则拦截',
+          backgroundColor: 'rgba(59, 130, 246, 0.7)', // 半透明蓝色
+          borderColor: '#3B82F6',
+          borderWidth: 2,
+          data: weeklyMetrics.value.map(m => m.rules_requests)
+        }
+      ]
+
+      return { labels, datasets }
+    })
+
+    const chartOptions = {
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: {
+        legend: {
+          position: 'top',
+          labels: {
+            font: {
+              size: 14
+            },
+            color: '#FFFFFF' // 白色文字
+          }
+        },
+        tooltip: {
+          mode: 'index',
+          intersect: false,
+          backgroundColor: 'rgba(0, 0, 0, 0.8)',
+          titleColor: '#FFFFFF',
+          bodyColor: '#FFFFFF',
+          borderColor: '#FFFFFF',
+          borderWidth: 1
+        }
+      },
+      scales: {
+        x: {
+          grid: {
+            color: 'rgba(255, 255, 255, 0.1)' // 淡白色网格线
+          },
+          ticks: {
+            color: '#FFFFFF' // 白色文字
+          }
+        },
+        y: {
+          beginAtZero: true,
+          grid: {
+            color: 'rgba(255, 255, 255, 0.1)' // 淡白色网格线
+          },
+          ticks: {
+            color: '#FFFFFF', // 白色文字
+            callback: function(value) {
+              return value.toLocaleString() // 格式化大数字
+            }
+          }
+        }
+      }
+    }
+
     onMounted(() => {
       fetchMetrics().then(() => {
         animateNumbers()
       })
+      fetchWeeklyMetrics()
       fetchActivityLogs()
     })
 
     return {
       metrics,
-      activityLogs
+      activityLogs,
+      chartData,
+      chartOptions
     }
   }
 }
