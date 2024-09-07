@@ -121,13 +121,16 @@ export default {
 
     const handleLogout = async () => {
       await store.dispatch('logout')
-      router.push({ name: 'Home' })
 
       notificationMessage.value = '登出成功！期待您的再次访问！'
       notificationEmoji.value = '👋'
       notificationType.value = 'success'
       showNotification.value = true
 
+      // 使用 setTimeout 延迟 1.5 秒后跳转
+      setTimeout(() => {
+        router.push({ name: 'Home' })
+      }, 1500)
     }
 
     return {

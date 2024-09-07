@@ -24,16 +24,20 @@
               placeholder="输入验证码"
           >
         </div>
-        <div class="flex items-center justify-between">
+        <div class="flex flex-col space-y-4 mt-6">
           <button
-              class="bg-blue-600 text-white px-6 py-3 rounded-lg hover:bg-blue-700 transform hover:scale-105 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-opacity-50 transition duration-300 shadow-lg"
+              class="bg-blue-500 text-white px-6 py-3 rounded-lg hover:bg-blue-700 transform hover:scale-105 transition duration-300 border-2 border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-opacity-50"
               type="submit"
           >
             登录 🚀
           </button>
-          <a href="#" class="inline-block align-baseline font-bold text-sm text-blue-400 hover:text-blue-600 transition duration-300">
-            忘记密码? 🔑
-          </a>
+          <button
+              @click="goToSetup2FA"
+              class="bg-green-500 text-white px-6 py-3 rounded-lg hover:bg-green-700 transform hover:scale-105 transition duration-300 border-2 border-green-400 focus:outline-none focus:ring-2 focus:ring-green-500 focus:ring-opacity-50"
+              type="button"
+          >
+            设置双因素认证 🔑
+          </button>
         </div>
       </form>
     </div>
@@ -96,10 +100,15 @@ export default {
       }
     }
 
+    const goToSetup2FA = () => {
+      router.push('/setup-2fa')
+    }
+
     return {
       account,
       code,
       handleLogin,
+      goToSetup2FA,
       showNotification,
       notificationMessage,
       notificationEmoji,

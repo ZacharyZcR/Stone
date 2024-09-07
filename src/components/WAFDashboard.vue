@@ -10,30 +10,30 @@
         <!-- 卡片 1 -->
         <div class="bg-gray-800 p-6 rounded-lg shadow-md transform hover:scale-105 transition duration-500">
           <div class="flex items-center">
-            <div class="text-blue-400 text-3xl">📈</div>
+            <div class="text-green-400 text-3xl">✅</div>
             <div class="ml-4">
-              <h3 class="text-xl font-bold">今日攻击</h3>
-              <p class="text-2xl animate-number-scroll" data-target="1234">0</p>
+              <h3 class="text-xl font-bold">成功请求</h3>
+              <p class="text-2xl animate-number-scroll" :data-target="metrics.success_requests">{{ metrics.success_requests }}</p>
             </div>
           </div>
         </div>
         <!-- 卡片 2 -->
         <div class="bg-gray-800 p-6 rounded-lg shadow-md transform hover:scale-105 transition duration-500">
           <div class="flex items-center">
-            <div class="text-green-400 text-3xl">✅</div>
+            <div class="text-red-400 text-3xl">🚫</div>
             <div class="ml-4">
-              <h3 class="text-xl font-bold">阻止攻击</h3>
-              <p class="text-2xl animate-number-scroll" data-target="1200">0</p>
+              <h3 class="text-xl font-bold">黑名单请求</h3>
+              <p class="text-2xl animate-number-scroll" :data-target="metrics.blacklist_requests">{{ metrics.blacklist_requests }}</p>
             </div>
           </div>
         </div>
         <!-- 卡片 3 -->
         <div class="bg-gray-800 p-6 rounded-lg shadow-md transform hover:scale-105 transition duration-500">
           <div class="flex items-center">
-            <div class="text-red-400 text-3xl">🚨</div>
+            <div class="text-blue-400 text-3xl">📏</div>
             <div class="ml-4">
-              <h3 class="text-xl font-bold">异常流量</h3>
-              <p class="text-2xl animate-number-scroll" data-target="34">0</p>
+              <h3 class="text-xl font-bold">规则拦截</h3>
+              <p class="text-2xl animate-number-scroll" :data-target="metrics.rules_requests">{{ metrics.rules_requests }}</p>
             </div>
           </div>
         </div>
@@ -82,8 +82,10 @@
 </template>
 
 <script>
+import { ref, onMounted } from 'vue'
 import HeaderPage from './HeaderPage.vue'
 import FooterPage from './FooterPage.vue'
+import api from '../api/axiosInstance'
 
 export default {
   name: 'WAFDashboard',
@@ -91,11 +93,23 @@ export default {
     HeaderPage,
     FooterPage
   },
-  mounted() {
-    this.animateNumbers();
-  },
-  methods: {
-    animateNumbers() {
+  setup() {
+    const metrics = ref({
+      success_requests: 0,
+      blacklist_requests: 0,
+      rules_requests: 0
+    })
+
+    const fetchMetrics = async () => {
+      try {
+        const response = await api.get('/firewall/metrics')
+        metrics.value = response.data
+      } catch (error) {
+        console.error('获取防火墙指标失败:', error)
+      }
+    }
+
+    const animateNumbers = () => {
       const elements = document.querySelectorAll('.animate-number-scroll');
       elements.forEach(el => {
         const target = parseInt(el.getAttribute('data-target'), 10);
@@ -112,6 +126,15 @@ export default {
         };
         updateCount();
       });
+    }
+
+    onMounted(() => {
+      fetchMetrics()
+      animateNumbers()
+    })
+
+    return {
+      metrics
     }
   }
 }

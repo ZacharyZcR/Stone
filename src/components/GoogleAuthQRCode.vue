@@ -1,23 +1,23 @@
 <template>
   <div class="bg-gray-900 flex items-center justify-center min-h-screen">
     <div class="bg-gray-800 p-8 rounded-lg shadow-lg w-full max-w-md text-center transform transition-all duration-700 ease-in-out hover:scale-105 opacity-0 translate-x-full animate-fade-in-right">
-      <h2 class="text-2xl font-bold mb-6 text-white">Google Authenticator 神奇设置 🧙‍♂️✨</h2>
+      <h2 class="text-2xl font-bold mb-6 text-white">Google Authenticator 设置 🔐</h2>
 
       <div v-if="interfaceClosed">
-        <p class="text-red-500 mb-4">哎呀！注册通道已经关闭啦 🚪🔒</p>
-        <p class="text-yellow-300">别灰心，可能是在进行魔法维护呢！ 🧹✨</p>
+        <p class="text-red-500 mb-4">注册通道已关闭 🚫</p>
+        <p class="text-yellow-300">请稍后再试</p>
       </div>
 
       <div v-else>
         <div v-if="qrCodeUrl" class="mb-6">
           <img :src="qrCodeUrl" alt="Google Authenticator QR Code" class="mx-auto">
-          <p class="text-green-400 mt-2">瞧！你的专属魔法二维码 🎭✨</p>
+          <p class="text-green-400 mt-2">您的二维码已生成 ✅</p>
         </div>
-        <p v-else-if="loading" class="text-white mb-4">正在召唤神奇的二维码... 🔮</p>
-        <p v-else class="text-white mb-4">准备好开启你的魔法之旅了吗？点击下方按钮！ 🚀</p>
+        <p v-else-if="loading" class="text-white mb-4">正在生成二维码...</p>
+        <p v-else class="text-white mb-4">点击下方按钮生成二维码</p>
 
         <p class="text-gray-300 mb-4">
-          用你的 Google Authenticator 魔法棒（呃，我是说 App）扫描这个二维码，开启双重保护咒语！ 🧙‍♀️📱
+          请使用 Google Authenticator 应用扫描二维码，以启用双因素认证 📱
         </p>
 
         <div class="flex flex-col space-y-4 mt-6">
@@ -26,7 +26,7 @@
               class="bg-blue-500 text-white px-6 py-3 rounded-lg hover:bg-blue-700 transform hover:scale-105 transition duration-300 border-2 border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-opacity-50"
               :disabled="loading"
           >
-            {{ qrCodeUrl ? '刷新魔法二维码' : '召唤二维码' }} 🔄✨
+            {{ qrCodeUrl ? '刷新二维码' : '生成二维码' }} 🔄
           </button>
 
           <button
@@ -79,23 +79,22 @@ export default {
         qrCodeUrl.value = URL.createObjectURL(response.data);
         interfaceClosed.value = false;
         showNotification.value = true;
-        notificationMessage.value = '魔法二维码召唤成功！';
-        notificationEmoji.value = '🎉';
+        notificationMessage.value = '二维码生成成功';
+        notificationEmoji.value = '✅';
         notificationType.value = 'success';
       } catch (error) {
         console.error('获取二维码失败:', error);
         interfaceClosed.value = true;
         showNotification.value = true;
-        notificationMessage.value = '哎呀，魔法通道暂时关闭了！';
-        notificationEmoji.value = '🔒';
+        notificationMessage.value = '二维码生成失败';
+        notificationEmoji.value = '❌';
         notificationType.value = 'error';
 
-        // 如果错误响应是 Blob 类型，需要读取其内容
         if (error.response && error.response.data instanceof Blob) {
           const text = await error.response.data.text();
           const errorData = JSON.parse(text);
           if (errorData.error === "二维码接口已关闭") {
-            notificationMessage.value = '二维码接口已关闭，请稍后再试！';
+            notificationMessage.value = '二维码接口已关闭，请稍后再试';
           }
         }
       } finally {
@@ -138,7 +137,6 @@ export default {
   animation: fade-in-right 1s forwards;
 }
 
-/* 可以添加一些额外的按钮样式 */
 button {
   font-weight: bold;
   text-shadow: 1px 1px 2px rgba(0,0,0,0.1);
