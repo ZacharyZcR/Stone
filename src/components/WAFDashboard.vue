@@ -51,25 +51,11 @@
       <div class="bg-gray-800 p-6 rounded-lg shadow-md">
         <h2 class="text-2xl font-bold mb-4">最近活动</h2>
         <ul class="space-y-4">
-          <li class="flex items-start animate-fade-in-up">
+          <li v-for="(log, index) in activityLogs" :key="index" class="flex items-start animate-fade-in-up">
             <span class="text-blue-400 text-2xl mr-4">🕒</span>
             <div>
-              <p class="font-bold">10:30 AM</p>
-              <p>检测到 SQL 注入攻击，已成功阻止。💪</p>
-            </div>
-          </li>
-          <li class="flex items-start animate-fade-in-up">
-            <span class="text-blue-400 text-2xl mr-4">🕒</span>
-            <div>
-              <p class="font-bold">09:45 AM</p>
-              <p>检测到 XSS 攻击，已成功阻止。🔒</p>
-            </div>
-          </li>
-          <li class="flex items-start animate-fade-in-up">
-            <span class="text-blue-400 text-2xl mr-4">🕒</span>
-            <div>
-              <p class="font-bold">08:20 AM</p>
-              <p>异常流量增加，正在监控中。👀</p>
+              <p class="font-bold">{{ log.time }}</p>
+              <p>{{ log.message }}</p>
             </div>
           </li>
         </ul>
@@ -100,10 +86,19 @@ export default {
       rules_requests: 0
     })
 
+    const activityLogs = ref([])
+
     const fetchMetrics = async () => {
       try {
         const response = await api.get('/firewall/metrics')
-        metrics.value = response.data
+        if (Array.isArray(response.data) && response.data.length > 0) {
+          const latestMetrics = response.data[0]
+          metrics.value = {
+            success_requests: latestMetrics.success_requests || 0,
+            blacklist_requests: latestMetrics.blacklist_requests || 0,
+            rules_requests: latestMetrics.rules_requests || 0
+          }
+        }
       } catch (error) {
         console.error('获取防火墙指标失败:', error)
       }
@@ -128,13 +123,26 @@ export default {
       });
     }
 
+    const fetchActivityLogs = async () => {
+      // 这里应该是从后端获取活动日志的逻辑
+      // 现在我们使用模拟数据
+      activityLogs.value = [
+        { time: '10:30 AM', message: '检测到 SQL 注入攻击，已成功阻止。💪' },
+        { time: '09:45 AM', message: '检测到 XSS 攻击，已成功阻止。🔒' },
+        { time: '08:20 AM', message: '异常流量增加，正在监控中。👀' }
+      ]
+    }
+
     onMounted(() => {
-      fetchMetrics()
-      animateNumbers()
+      fetchMetrics().then(() => {
+        animateNumbers()
+      })
+      fetchActivityLogs()
     })
 
     return {
-      metrics
+      metrics,
+      activityLogs
     }
   }
 }
