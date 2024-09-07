@@ -87,6 +87,13 @@ func SetMetricsCollection(collection *mongo.Collection) {
 	metricsCollection = collection
 }
 
+type DailyMetrics struct {
+	Date                    time.Time `bson:"date"`
+	WebsiteRequestsTotal    int       `bson:"websiteRequestsTotal"`
+	BlockedByBlacklistTotal int       `bson:"blockedByBlacklistTotal"`
+	BlockedByRulesTotal     int       `bson:"blockedByRulesTotal"`
+}
+
 // GetFirewallMetrics 获取防火墙相关的指标
 func GetFirewallMetrics(c *gin.Context) {
 	if metricsCollection == nil {
@@ -94,33 +101,70 @@ func GetFirewallMetrics(c *gin.Context) {
 		return
 	}
 
-	var metrics struct {
-		Timestamp               time.Time `bson:"timestamp"`
-		WebsiteRequestsTotal    int       `bson:"websiteRequestsTotal"`
-		BlockedByBlacklistTotal int       `bson:"blockedByBlacklistTotal"`
-		BlockedByRulesTotal     int       `bson:"blockedByRulesTotal"`
+	// 获取查询参数
+	startDateStr := c.Query("start_date")
+	endDateStr := c.Query("end_date")
+
+	var startDate, endDate time.Time
+	var err error
+
+	// 如果没有提供参数，使用当天的日期
+	if startDateStr == "" || endDateStr == "" {
+		startDate = time.Now().UTC().Truncate(24 * time.Hour)
+		endDate = startDate
+	} else {
+		// 解析日期字符串
+		startDate, err = time.Parse("2006-01-02", startDateStr)
+		if err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid start date format"})
+			return
+		}
+		endDate, err = time.Parse("2006-01-02", endDateStr)
+		if err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid end date format"})
+			return
+		}
 	}
 
-	err := metricsCollection.FindOne(
-		context.Background(),
-		bson.M{},
-		options.FindOne().SetSort(bson.D{{"timestamp", -1}}),
-	).Decode(&metrics)
+	// 查询指定日期范围内的指标
+	filter := bson.M{
+		"date": bson.M{
+			"$gte": startDate,
+			"$lte": endDate.Add(24*time.Hour - time.Second), // 包括结束日期的全天
+		},
+	}
+	opts := options.Find().SetSort(bson.D{{"date", 1}})
 
+	cursor, err := metricsCollection.Find(context.Background(), filter, opts)
 	if err != nil {
-		if err == mongo.ErrNoDocuments {
-			c.JSON(http.StatusNotFound, gin.H{"error": "No metrics data found"})
-		} else {
-			log.Printf("Error retrieving metrics: %v", err)
-			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to retrieve metrics data"})
-		}
+		log.Printf("Error retrieving metrics: %v", err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to retrieve metrics data"})
+		return
+	}
+	defer cursor.Close(context.Background())
+
+	var metrics []DailyMetrics
+	if err = cursor.All(context.Background(), &metrics); err != nil {
+		log.Printf("Error decoding metrics: %v", err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to decode metrics data"})
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{
-		"success_requests":   metrics.WebsiteRequestsTotal,
-		"blacklist_requests": metrics.BlockedByBlacklistTotal,
-		"rules_requests":     metrics.BlockedByRulesTotal,
-		"last_updated":       metrics.Timestamp,
-	})
+	if len(metrics) == 0 {
+		c.JSON(http.StatusNotFound, gin.H{"error": "No metrics data found for the specified date range"})
+		return
+	}
+
+	// 构造响应
+	response := make([]gin.H, len(metrics))
+	for i, m := range metrics {
+		response[i] = gin.H{
+			"date":               m.Date.Format("2006-01-02"),
+			"success_requests":   m.WebsiteRequestsTotal,
+			"blacklist_requests": m.BlockedByBlacklistTotal,
+			"rules_requests":     m.BlockedByRulesTotal,
+		}
+	}
+
+	c.JSON(http.StatusOK, response)
 }
