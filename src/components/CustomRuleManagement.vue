@@ -60,50 +60,77 @@
 
     <!-- 页脚 -->
     <FooterPage />
+
+    <!-- 弹窗通知 -->
+    <PopupNotification
+        v-if="showNotification"
+        :message="notificationMessage"
+        :emoji="notificationEmoji"
+        :type="notificationType"
+        @close="showNotification = false"
+    />
   </div>
 </template>
 
 <script>
 import { ref, onMounted } from 'vue';
-import api from '../api/axiosInstance'; // 导入配置好的 Axios 实例
+import api from '../api/axiosInstance';
 import HeaderPage from './HeaderPage.vue';
 import FooterPage from './FooterPage.vue';
+import PopupNotification from './PopupNotification.vue';
 
 export default {
   name: 'CustomRuleManagement',
   components: {
     HeaderPage,
-    FooterPage
+    FooterPage,
+    PopupNotification
   },
   setup() {
     const rules = ref([]);
     const newRule = ref({ name: '', regex: '', method: 'GET' });
+    const showNotification = ref(false);
+    const notificationMessage = ref('');
+    const notificationEmoji = ref('');
+    const notificationType = ref('success');
+
+    const showPopup = (message, emoji, type) => {
+      notificationMessage.value = message;
+      notificationEmoji.value = emoji;
+      notificationType.value = type;
+      showNotification.value = true;
+    };
 
     const fetchRules = async () => {
       try {
-        const response = await api.get('/interception-rules'); // 使用 Axios 实例
+        const response = await api.get('/interception-rules');
         rules.value = response.data.rules || [];
       } catch (error) {
         console.error('获取规则失败:', error);
+        showPopup('获取规则失败', '❌', 'error');
       }
     };
 
     const addRule = async () => {
       try {
-        await api.post('/interception-rules', newRule.value); // 使用 Axios 实例
-        await fetchRules(); // 重新获取规则列表
-        newRule.value = { name: '', regex: '', method: 'GET' }; // 清空表单
+        await api.post('/interception-rules', newRule.value);
+        await fetchRules();
+        newRule.value = { name: '', regex: '', method: 'GET' };
+        showPopup('规则添加成功', '✅', 'success');
       } catch (error) {
         console.error('添加规则失败:', error);
+        showPopup('添加规则失败', '❌', 'error');
       }
     };
 
     const deleteRule = async (rule) => {
       try {
-        await api.delete(`/interception-rules/${rule.name}`); // 使用 Axios 实例
-        await fetchRules(); // 重新获取规则列表
+        await api.delete(`/interception-rules/${rule.name}`);
+        await fetchRules();
+        showPopup(`规则 "${rule.name}" 已删除`, '🗑️', 'success');
       } catch (error) {
         console.error('删除规则失败:', error);
+        showPopup(`删除规则 "${rule.name}" 失败`, '❌', 'error');
       }
     };
 
@@ -115,7 +142,11 @@ export default {
       rules,
       newRule,
       addRule,
-      deleteRule
+      deleteRule,
+      showNotification,
+      notificationMessage,
+      notificationEmoji,
+      notificationType
     };
   }
 };
