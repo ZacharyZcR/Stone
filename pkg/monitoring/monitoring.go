@@ -1,42 +1,54 @@
 package monitoring
 
 import (
-	"github.com/prometheus/client_golang/prometheus"
-	"github.com/prometheus/client_golang/prometheus/promhttp"
-	"net/http"
+	"context"
+	"fmt"
+	"go.mongodb.org/mongo-driver/bson"
+	"go.mongodb.org/mongo-driver/mongo"
+	"go.mongodb.org/mongo-driver/mongo/options"
+	"log"
+	"time"
 )
 
-// 定义Prometheus指标
-var (
-	WebsiteRequestsTotal = prometheus.NewCounterVec(
-		prometheus.CounterOpts{
-			Name: "website_requests_total",
-			Help: "防火墙所保护的网站的访问总次数",
-		},
-		[]string{"status"},
-	)
-	BlockedByBlacklistTotal = prometheus.NewCounter(
-		prometheus.CounterOpts{
-			Name: "blocked_by_blacklist_total",
-			Help: "被黑名单拦截的请求总次数",
-		},
-	)
-	BlockedByRulesTotal = prometheus.NewCounter(
-		prometheus.CounterOpts{
-			Name: "blocked_by_rules_total",
-			Help: "被规则拦截的请求总次数",
-		},
-	)
-)
+var metricsCollection *mongo.Collection
 
-// InitMonitoring 初始化Prometheus监控
-func InitMonitoring() {
-	// 注册指标
-	prometheus.MustRegister(WebsiteRequestsTotal)
-	prometheus.MustRegister(BlockedByBlacklistTotal)
-	prometheus.MustRegister(BlockedByRulesTotal)
+func SetMongoCollection(collection *mongo.Collection) {
+	metricsCollection = collection
+}
 
-	// 启动HTTP服务器以暴露指标
-	http.Handle("/metrics", promhttp.Handler())
-	go http.ListenAndServe(":2112", nil)
+type Metrics struct {
+	Timestamp               time.Time `bson:"timestamp"`
+	WebsiteRequestsTotal    int       `bson:"websiteRequestsTotal"`
+	BlockedByBlacklistTotal int       `bson:"blockedByBlacklistTotal"`
+	BlockedByRulesTotal     int       `bson:"blockedByRulesTotal"`
+}
+
+func IncrementMetric(metric string) error {
+	if metricsCollection == nil {
+		return fmt.Errorf("metrics collection is not initialized")
+	}
+
+	filter := bson.M{}
+	update := bson.M{
+		"$inc": bson.M{metric: 1},
+		"$set": bson.M{"timestamp": time.Now()},
+	}
+	opts := options.Update().SetUpsert(true)
+
+	result, err := metricsCollection.UpdateOne(context.Background(), filter, update, opts)
+	if err != nil {
+		log.Printf("Error updating metric %s: %v", metric, err)
+		return err
+	}
+
+	log.Printf("Metric %s updated. Matched: %d, Modified: %d, Upserted: %d",
+		metric, result.MatchedCount, result.ModifiedCount, result.UpsertedCount)
+
+	return nil
+}
+
+func GetMetrics() (Metrics, error) {
+	var metrics Metrics
+	err := metricsCollection.FindOne(context.Background(), bson.M{}).Decode(&metrics)
+	return metrics, err
 }

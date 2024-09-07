@@ -2,13 +2,17 @@ package handlers
 
 import (
 	"Stone/pkg/monitoring"
+	"context"
 	"github.com/gin-gonic/gin"
-	"github.com/prometheus/client_golang/prometheus"
 	"github.com/shirou/gopsutil/cpu"
 	"github.com/shirou/gopsutil/disk"
 	"github.com/shirou/gopsutil/load"
 	"github.com/shirou/gopsutil/mem"
 	"github.com/shirou/gopsutil/net"
+	"go.mongodb.org/mongo-driver/bson"
+	"go.mongodb.org/mongo-driver/mongo"
+	"go.mongodb.org/mongo-driver/mongo/options"
+	"log"
 	"net/http"
 	"runtime"
 	"time"
@@ -76,42 +80,47 @@ func GetStatus(c *gin.Context) {
 	})
 }
 
+var metricsCollection *mongo.Collection
+
+// SetMetricsCollection 设置 metrics 集合
+func SetMetricsCollection(collection *mongo.Collection) {
+	metricsCollection = collection
+}
+
 // GetFirewallMetrics 获取防火墙相关的指标
 func GetFirewallMetrics(c *gin.Context) {
-	// 获取所有指标
-	metrics, err := prometheus.DefaultGatherer.Gather()
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "无法获取指标数据"})
+	if metricsCollection == nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Metrics collection is not initialized"})
 		return
 	}
 
-	var successCount, blacklistCount, rulesCount float64
+	var metrics struct {
+		Timestamp               time.Time `bson:"timestamp"`
+		WebsiteRequestsTotal    int       `bson:"websiteRequestsTotal"`
+		BlockedByBlacklistTotal int       `bson:"blockedByBlacklistTotal"`
+		BlockedByRulesTotal     int       `bson:"blockedByRulesTotal"`
+	}
 
-	// 遍历指标，查找相关的计数器
-	for _, mf := range metrics {
-		switch mf.GetName() {
-		case "website_requests_total":
-			for _, metric := range mf.GetMetric() {
-				for _, label := range metric.GetLabel() {
-					if label.GetName() == "status" && label.GetValue() == "success" {
-						successCount += metric.GetCounter().GetValue()
-					}
-				}
-			}
-		case "blocked_by_blacklist_total":
-			for _, metric := range mf.GetMetric() {
-				blacklistCount += metric.GetCounter().GetValue()
-			}
-		case "blocked_by_rules_total":
-			for _, metric := range mf.GetMetric() {
-				rulesCount += metric.GetCounter().GetValue()
-			}
+	err := metricsCollection.FindOne(
+		context.Background(),
+		bson.M{},
+		options.FindOne().SetSort(bson.D{{"timestamp", -1}}),
+	).Decode(&metrics)
+
+	if err != nil {
+		if err == mongo.ErrNoDocuments {
+			c.JSON(http.StatusNotFound, gin.H{"error": "No metrics data found"})
+		} else {
+			log.Printf("Error retrieving metrics: %v", err)
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to retrieve metrics data"})
 		}
+		return
 	}
 
 	c.JSON(http.StatusOK, gin.H{
-		"success_requests":   successCount,
-		"blacklist_requests": blacklistCount,
-		"rules_requests":     rulesCount,
+		"success_requests":   metrics.WebsiteRequestsTotal,
+		"blacklist_requests": metrics.BlockedByBlacklistTotal,
+		"rules_requests":     metrics.BlockedByRulesTotal,
+		"last_updated":       metrics.Timestamp,
 	})
 }

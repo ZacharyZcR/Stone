@@ -6,6 +6,7 @@ import (
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/mongo"
 	"go.mongodb.org/mongo-driver/mongo/options"
+	"time"
 )
 
 func main() {
@@ -21,6 +22,7 @@ func main() {
 	configCollection := client.Database("stoneDB").Collection("config")
 	rulesCollection := client.Database("stoneDB").Collection("rules")
 	logsCollection := client.Database("stoneDB").Collection("logs")
+	metricsCollection := client.Database("stoneDB").Collection("metrics") // 新增的指标集合
 
 	// 插入配置文档
 	configDoc := bson.M{
@@ -78,6 +80,20 @@ func main() {
 	_, err = logsCollection.InsertOne(context.Background(), bson.M{"initialized": true})
 	if err != nil {
 		fmt.Printf("初始化日志集合失败: %v\n", err)
+		return
+	}
+
+	// 初始化指标集合
+	initialMetrics := bson.M{
+		"timestamp":               time.Now(),
+		"websiteRequestsTotal":    0,
+		"blockedByBlacklistTotal": 0,
+		"blockedByRulesTotal":     0,
+	}
+
+	_, err = metricsCollection.InsertOne(context.Background(), initialMetrics)
+	if err != nil {
+		fmt.Printf("初始化指标集合失败: %v\n", err)
 		return
 	}
 

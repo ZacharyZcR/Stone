@@ -39,12 +39,15 @@ func main() {
 	rulesCollection := client.Database("stoneDB").Collection("rules")
 	totpCollection := client.Database("stoneDB").Collection("totp")
 	userCollection := client.Database("stoneDB").Collection("users") // 新增的用户集合
+	metricsCollection := client.Database("stoneDB").Collection("metrics")
 
 	// 设置集合
 	config.SetMongoCollection(configCollection)
 	rules.SetMongoCollection(rulesCollection)
+	monitoring.SetMongoCollection(metricsCollection)
 	handlers.SetTOTPCollection(totpCollection)
 	handlers.SetUserCollection(userCollection) // 设置用户集合
+	handlers.SetMetricsCollection(metricsCollection)
 
 	// 从MongoDB加载配置
 	cfg, err := config.LoadConfig(context.Background())
@@ -65,8 +68,6 @@ func main() {
 		logging.LogError(fmt.Errorf("加载IP控制规则失败: %v", err))
 		return
 	}
-
-	monitoring.InitMonitoring()
 
 	logging.LogInfo(fmt.Sprintf("服务器将在端口 %d 上运行", cfg.Server.Port))
 	logging.LogInfo(fmt.Sprintf("防火墙模式: %s", cfg.Firewall.Mode))

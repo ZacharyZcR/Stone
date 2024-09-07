@@ -7,6 +7,7 @@ import (
 	"bufio"
 	"fmt"
 	"io"
+	"log"
 	"math/rand"
 	"net"
 	"net/http"
@@ -45,7 +46,7 @@ func HandleHTTPConnection(clientConn net.Conn, targetAddress string) {
 		if !allowed {
 			fmt.Printf("IP在黑名单中，连接已阻断: %s\n", clientIP)
 			utils.LogTraffic(clientIP, targetAddress, request.URL.String(), request.Method, request.Header, "", "IP在黑名单中")
-			monitoring.BlockedByBlacklistTotal.Inc()
+			monitoring.IncrementMetric("blockedByBlacklistTotal")
 			sendBlockedResponse(clientConn, "blocked.html")
 			return
 		}
@@ -54,7 +55,7 @@ func HandleHTTPConnection(clientConn net.Conn, targetAddress string) {
 		if !inWhitelist && !rules.CheckRequest(request) {
 			fmt.Println("检测到危险请求，连接已阻断")
 			utils.LogTraffic(clientIP, targetAddress, request.URL.String(), request.Method, request.Header, "", "Blocked by rules")
-			monitoring.BlockedByRulesTotal.Inc()
+			monitoring.IncrementMetric("blockedByRulesTotal")
 			sendBlockedResponse(clientConn, "blocked.html")
 			return
 		}
@@ -81,7 +82,10 @@ func HandleHTTPConnection(clientConn net.Conn, targetAddress string) {
 		}
 
 		// 请求成功，更新访问计数
-		monitoring.WebsiteRequestsTotal.WithLabelValues("success").Inc()
+		err = monitoring.IncrementMetric("websiteRequestsTotal")
+		if err != nil {
+			log.Printf("Failed to increment websiteRequestsTotal: %v", err)
+		}
 		utils.LogTraffic(clientIP, targetAddress, request.URL.String(), request.Method, request.Header, "", "")
 
 		// 关闭响应体
