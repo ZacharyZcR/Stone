@@ -1,0 +1,31 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>访问被阻断</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        @keyframes fadeIn {
+            from { opacity: 0; }
+            to { opacity: 1; }
+        }
+        .animate-fade-in {
+            animation: fadeIn 0.8s ease-out;
+        }
+    </style>
+</head>
+<body class="bg-gradient-to-br from-gray-900 to-gray-800 text-white flex items-center justify-center min-h-screen">
+<div class="bg-gray-800 bg-opacity-50 p-10 rounded-xl shadow-2xl w-full max-w-lg text-center animate-fade-in backdrop-filter backdrop-blur-lg">
+    <h1 class="text-red-500 text-5xl font-bold mb-6">访问被阻断</h1>
+    <svg class="w-24 h-24 mx-auto mb-6 text-red-500" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"></path>
+    </svg>
+    <p class="text-gray-300 text-xl mb-8">抱歉，您的请求因安全原因被拦截。</p>
+    <p class="text-gray-400 mb-10">我们正在努力保护您的网络安全。</p>
+    <a href="/" class="bg-blue-600 text-white px-8 py-3 rounded-full text-lg font-semibold hover:bg-blue-700 transform hover:scale-105 transition duration-300 inline-block">
+        返回首页
+    </a>
+</div>
+</body>
+</html>

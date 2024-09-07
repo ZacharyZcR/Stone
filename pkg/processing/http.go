@@ -1,5 +1,3 @@
-// pkg/processing/http.go
-
 package processing
 
 import (
@@ -9,8 +7,10 @@ import (
 	"bufio"
 	"fmt"
 	"io"
+	"math/rand"
 	"net"
 	"net/http"
+	"os"
 )
 
 // HandleHTTPConnection 处理HTTP连接
@@ -19,6 +19,9 @@ func HandleHTTPConnection(clientConn net.Conn, targetAddress string) {
 
 	// 获取客户端IP
 	clientIP, _, _ := net.SplitHostPort(clientConn.RemoteAddr().String())
+
+	// 尝试将IPv6地址转换为IPv4地址
+	clientIP = convertIPv6ToIPv4(clientIP)
 
 	// 创建bufio.Reader
 	reader := bufio.NewReader(clientConn)
@@ -43,6 +46,7 @@ func HandleHTTPConnection(clientConn net.Conn, targetAddress string) {
 			fmt.Printf("IP在黑名单中，连接已阻断: %s\n", clientIP)
 			utils.LogTraffic(clientIP, targetAddress, request.URL.String(), request.Method, request.Header, "", "IP在黑名单中")
 			monitoring.BlockedByBlacklistTotal.Inc()
+			sendBlockedResponse(clientConn, "blocked.html")
 			return
 		}
 
@@ -51,6 +55,7 @@ func HandleHTTPConnection(clientConn net.Conn, targetAddress string) {
 			fmt.Println("检测到危险请求，连接已阻断")
 			utils.LogTraffic(clientIP, targetAddress, request.URL.String(), request.Method, request.Header, "", "Blocked by rules")
 			monitoring.BlockedByRulesTotal.Inc()
+			sendBlockedResponse(clientConn, "blocked.html")
 			return
 		}
 
@@ -88,4 +93,57 @@ func HandleHTTPConnection(clientConn net.Conn, targetAddress string) {
 		}
 		break
 	}
+}
+
+func sendBlockedResponse(conn net.Conn, filePath string) {
+	// 读取HTML文件内容
+	htmlContent, err := os.ReadFile(filePath)
+	if err != nil {
+		fmt.Println("无法读取被阻断响应文件:", err)
+		return
+	}
+
+	// 生成随机状态码（200到503之间）
+	randomStatusCode := rand.Intn(304) + 200
+
+	// 生成随机长度的随机字符串（5000到10000个字符）
+	randomLength := rand.Intn(5001) + 5000
+	randomString := make([]byte, randomLength)
+	for i := range randomString {
+		randomString[i] = byte(rand.Intn(94) + 33) // 可打印ASCII字符
+	}
+
+	// 将随机字符串作为HTML注释插入到HTML内容中
+	htmlWithRandomString := []byte(fmt.Sprintf("%s\n<!-- %s -->", htmlContent, randomString))
+
+	// 构造响应
+	response := fmt.Sprintf("HTTP/1.1 %d \r\n"+
+		"Content-Type: text/html; charset=UTF-8\r\n"+
+		"Content-Length: %d\r\n"+
+		"\r\n"+
+		"%s",
+		randomStatusCode,
+		len(htmlWithRandomString),
+		htmlWithRandomString)
+
+	// 发送响应
+	_, err = conn.Write([]byte(response))
+	if err != nil {
+		fmt.Println("写回被阻断响应失败:", err)
+	}
+}
+
+// 新增函数: 尝试将IPv6地址转换为IPv4地址
+func convertIPv6ToIPv4(ipAddress string) string {
+	ip := net.ParseIP(ipAddress)
+	if ip == nil {
+		return ipAddress // 如果解析失败,返回原始地址
+	}
+
+	if ip.To4() != nil {
+		return ip.To4().String() // 如果是IPv4或者可以转换为IPv4,返回IPv4地址
+	}
+
+	// 对于无法转换的IPv6地址,保持原样
+	return ipAddress
 }

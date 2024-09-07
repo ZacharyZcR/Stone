@@ -83,6 +83,9 @@ func SetupRouter(configCollection *mongo.Collection, userCollection *mongo.Colle
 		authenticated.GET("/users/:account", handlers.HandleUsers)
 		authenticated.POST("/users", handlers.HandleUsers)
 		authenticated.DELETE("/users/:account", handlers.HandleUsers)
+
+		// 防火墙指标API
+		authenticated.GET("/firewall/metrics", handlers.GetFirewallMetrics)
 	}
 
 	return router
