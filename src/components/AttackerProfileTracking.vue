@@ -4,9 +4,20 @@
 
     <div class="container mx-auto px-4 py-8 flex-1 mt-16">
       <AttackerInfo :ip-address="ipAddress" @fetch-profile="fetchAttackerProfile" />
-      <VisitStatistics v-if="profile" :profile="profile" />
-      <DailyVisitChart v-if="profile" :daily-attacks="profile.daily_attacks" />
-      <HourlyVisitChart v-if="profile" :hourly-distribution="profile.hourly_distribution" />
+      <div v-if="loading" class="text-center py-8">
+        <p class="text-xl">加载中...</p>
+      </div>
+      <div v-else-if="error" class="text-center py-8">
+        <p class="text-xl text-red-500">{{ error }}</p>
+      </div>
+      <template v-else-if="profile">
+        <VisitStatistics :profile="profile" />
+        <DailyVisitChart :daily-attacks="profile.daily_attacks" />
+        <HourlyVisitChart :hourly-distribution="profile.hourly_distribution" />
+      </template>
+      <div v-else class="text-center py-8">
+        <p class="text-xl">没有找到数据</p>
+      </div>
     </div>
 
     <FooterPage />
@@ -14,7 +25,7 @@
 </template>
 
 <script>
-import { ref } from 'vue';
+import { ref, onMounted } from 'vue';
 import HeaderPage from './HeaderPage.vue';
 import FooterPage from './FooterPage.vue';
 import AttackerInfo from './AttackerInfo.vue';
@@ -34,22 +45,37 @@ export default {
     HourlyVisitChart
   },
   setup() {
-    const ipAddress = ref('');
+    const ipAddress = ref('127.0.0.1');
     const profile = ref(null);
+    const loading = ref(false);
+    const error = ref(null);
 
     const fetchAttackerProfile = async (ip) => {
+      loading.value = true;
+      error.value = null;
       try {
         const response = await api.get(`/attacker-profile?ip=${ip}`);
         profile.value = response.data;
-      } catch (error) {
-        console.error('获取攻击者画像失败:', error);
+        ipAddress.value = ip;
+      } catch (err) {
+        console.error('获取攻击者画像失败:', err);
+        error.value = '获取数据失败，请稍后再试';
+        profile.value = null;
+      } finally {
+        loading.value = false;
       }
     };
+
+    onMounted(() => {
+      fetchAttackerProfile(ipAddress.value);
+    });
 
     return {
       ipAddress,
       profile,
-      fetchAttackerProfile
+      fetchAttackerProfile,
+      loading,
+      error
     };
   }
 };
