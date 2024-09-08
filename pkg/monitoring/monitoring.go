@@ -28,78 +28,34 @@ func IncrementMetric(metric string) error {
 		return fmt.Errorf("metrics collection is not initialized")
 	}
 
-	// 获取当前日期（去掉时分秒）
-	today := time.Now().Truncate(24 * time.Hour)
+	// 定义北京时区
+	beijingLocation, err := time.LoadLocation("Asia/Shanghai")
+	if err != nil {
+		return fmt.Errorf("failed to load Beijing timezone: %v", err)
+	}
 
-	filter := bson.M{"date": today}
+	// 获取当前北京时间（去掉时分秒）
+	now := time.Now().In(beijingLocation)
+	today := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, beijingLocation)
+
+	// 将北京时间转换为 UTC 时间存储
+	todayUTC := today.UTC()
+
+	filter := bson.M{"date": todayUTC}
 	update := bson.M{
 		"$inc":         bson.M{metric: 1},
-		"$setOnInsert": bson.M{"date": today},
+		"$setOnInsert": bson.M{"date": todayUTC},
 	}
 	opts := options.Update().SetUpsert(true)
 
 	result, err := metricsCollection.UpdateOne(context.Background(), filter, update, opts)
 	if err != nil {
-		log.Printf("Error updating metric %s for date %v: %v", metric, today, err)
+		log.Printf("Error updating metric %s for date %v (UTC: %v): %v", metric, today, todayUTC, err)
 		return err
 	}
 
-	log.Printf("Metric %s updated for date %v. Matched: %d, Modified: %d, Upserted: %d",
-		metric, today, result.MatchedCount, result.ModifiedCount, result.UpsertedCount)
+	log.Printf("Metric %s updated for date %v (UTC: %v). Matched: %d, Modified: %d, Upserted: %d",
+		metric, today, todayUTC, result.MatchedCount, result.ModifiedCount, result.UpsertedCount)
 
 	return nil
-}
-
-func GetMetrics(days int) ([]DailyMetrics, error) {
-	if metricsCollection == nil {
-		return nil, fmt.Errorf("metrics collection is not initialized")
-	}
-
-	// 计算开始日期
-	endDate := time.Now().Truncate(24 * time.Hour)
-	startDate := endDate.AddDate(0, 0, -days+1)
-
-	// 查询指定日期范围内的指标
-	filter := bson.M{
-		"date": bson.M{
-			"$gte": startDate,
-			"$lte": endDate,
-		},
-	}
-	opts := options.Find().SetSort(bson.D{{"date", 1}})
-
-	cursor, err := metricsCollection.Find(context.Background(), filter, opts)
-	if err != nil {
-		return nil, err
-	}
-	defer cursor.Close(context.Background())
-
-	var metrics []DailyMetrics
-	if err = cursor.All(context.Background(), &metrics); err != nil {
-		return nil, err
-	}
-
-	// 如果某天没有数据，填充零值
-	filledMetrics := fillMissingDays(metrics, startDate, endDate)
-
-	return filledMetrics, nil
-}
-
-func fillMissingDays(metrics []DailyMetrics, startDate, endDate time.Time) []DailyMetrics {
-	filledMetrics := make([]DailyMetrics, 0)
-	metricsMap := make(map[time.Time]DailyMetrics)
-
-	for _, m := range metrics {
-		metricsMap[m.Date] = m
-	}
-
-	for d := startDate; !d.After(endDate); d = d.AddDate(0, 0, 1) {
-		if m, exists := metricsMap[d]; exists {
-			filledMetrics = append(filledMetrics, m)
-		} else {
-			filledMetrics = append(filledMetrics, DailyMetrics{Date: d})
-		}
-	}
-
-	return filledMetrics
 }

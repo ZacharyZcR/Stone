@@ -100,6 +100,9 @@ func GetFirewallMetrics(c *gin.Context) {
 		return
 	}
 
+	// 定义北京时区
+	beijingLocation, _ := time.LoadLocation("Asia/Shanghai")
+
 	// 获取查询参数
 	startDateStr := c.Query("start_date")
 	endDateStr := c.Query("end_date")
@@ -107,18 +110,19 @@ func GetFirewallMetrics(c *gin.Context) {
 	var startDate, endDate time.Time
 	var err error
 
-	// 如果没有提供参数，使用当天的日期
+	// 如果没有提供参数，使用当天的北京日期
 	if startDateStr == "" || endDateStr == "" {
-		startDate = time.Now().UTC().Truncate(24 * time.Hour)
+		now := time.Now().In(beijingLocation)
+		startDate = time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, beijingLocation)
 		endDate = startDate
 	} else {
-		// 解析日期字符串
-		startDate, err = time.Parse("2006-01-02", startDateStr)
+		// 解析日期字符串为北京时间
+		startDate, err = time.ParseInLocation("2006-01-02", startDateStr, beijingLocation)
 		if err != nil {
 			c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid start date format"})
 			return
 		}
-		endDate, err = time.Parse("2006-01-02", endDateStr)
+		endDate, err = time.ParseInLocation("2006-01-02", endDateStr, beijingLocation)
 		if err != nil {
 			c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid end date format"})
 			return
@@ -128,11 +132,15 @@ func GetFirewallMetrics(c *gin.Context) {
 	// 计算请求的天数
 	days := int(endDate.Sub(startDate).Hours()/24) + 1
 
+	// 调整查询时间范围
+	startDateUTC := startDate.UTC()
+	endDateUTC := endDate.Add(24 * time.Hour).UTC()
+
 	// 查询指定日期范围内的指标
 	filter := bson.M{
 		"date": bson.M{
-			"$gte": startDate,
-			"$lte": endDate.Add(24*time.Hour - time.Second), // 包括结束日期的全天
+			"$gte": startDateUTC,
+			"$lt":  endDateUTC,
 		},
 	}
 	opts := options.Find().SetSort(bson.D{{"date", 1}})
@@ -156,9 +164,9 @@ func GetFirewallMetrics(c *gin.Context) {
 	response := make([]gin.H, days)
 	metricsMap := make(map[string]DailyMetrics)
 
-	// 将查询到的指标数据放入 map 中
+	// 将查询到的指标数据放入 map 中，使用北京时间的日期作为键
 	for _, m := range metrics {
-		dateStr := m.Date.Format("2006-01-02")
+		dateStr := m.Date.In(beijingLocation).Format("2006-01-02")
 		metricsMap[dateStr] = m
 	}
 

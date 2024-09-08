@@ -206,11 +206,18 @@ type DailyStats struct {
 	Normal  int `json:"normal"`
 }
 
-// FetchAttackerProfile 从MongoDB中获取攻击者画像
 func FetchAttackerProfile(ctx context.Context, ip string, endTime time.Time) (AttackerProfile, error) {
+	// 定义北京时区
+	beijingLoc, err := time.LoadLocation("Asia/Shanghai")
+	if err != nil {
+		return AttackerProfile{}, fmt.Errorf("failed to load Beijing timezone: %v", err)
+	}
+
+	// 将endTime转换为北京时间
+	endTime = endTime.In(beijingLoc)
 	startTime := endTime.AddDate(0, 0, -6) // 获取7天的数据（包括当天）
-	startTime = time.Date(startTime.Year(), startTime.Month(), startTime.Day(), 0, 0, 0, 0, startTime.Location())
-	endTime = time.Date(endTime.Year(), endTime.Month(), endTime.Day(), 23, 59, 59, 999999999, endTime.Location())
+	startTime = time.Date(startTime.Year(), startTime.Month(), startTime.Day(), 0, 0, 0, 0, beijingLoc)
+	endTime = time.Date(endTime.Year(), endTime.Month(), endTime.Day(), 23, 59, 59, 999999999, beijingLoc)
 
 	profile := AttackerProfile{
 		DailyAttacks:       make(map[string]DailyStats),
@@ -220,20 +227,27 @@ func FetchAttackerProfile(ctx context.Context, ip string, endTime time.Time) (At
 		TotalAttacks:       0,
 	}
 
-	// 构建基础过滤条件
+	// 构建基础过滤条件（使用UTC时间进行查询）
 	filter := bson.M{
 		"client_ip": ip,
 		"timestamp": bson.M{
-			"$gte": startTime,
-			"$lte": endTime,
+			"$gte": startTime.UTC(),
+			"$lte": endTime.UTC(),
 		},
 	}
 
 	// 1. 获取每日攻击和正常访问次数分布
 	dailyPipeline := []bson.M{
 		{"$match": filter},
+		{"$project": bson.M{
+			"date": bson.M{"$dateToString": bson.M{
+				"format": "%Y-%m-%d",
+				"date":   bson.M{"$add": []interface{}{"$timestamp", 8 * 60 * 60 * 1000}}, // 转换为北京时间
+			}},
+			"status": 1,
+		}},
 		{"$group": bson.M{
-			"_id":   bson.M{"$dateToString": bson.M{"format": "%Y-%m-%d", "date": "$timestamp"}},
+			"_id":   "$date",
 			"total": bson.M{"$sum": 1},
 			"attacks": bson.M{"$sum": bson.M{
 				"$cond": []interface{}{bson.M{"$ne": []interface{}{"$status", "success"}}, 1, 0},
@@ -283,14 +297,14 @@ func FetchAttackerProfile(ctx context.Context, ip string, endTime time.Time) (At
 		}
 	}
 
-	mostActiveDayStart, _ := time.Parse("2006-01-02", profile.MostActiveDay)
+	mostActiveDayStart, _ := time.ParseInLocation("2006-01-02", profile.MostActiveDay, beijingLoc)
 	mostActiveDayEnd := mostActiveDayStart.Add(24 * time.Hour)
 
 	hourlyFilter := bson.M{
 		"client_ip": ip,
 		"timestamp": bson.M{
-			"$gte": mostActiveDayStart,
-			"$lt":  mostActiveDayEnd,
+			"$gte": mostActiveDayStart.UTC(),
+			"$lt":  mostActiveDayEnd.UTC(),
 		},
 	}
 
@@ -299,7 +313,7 @@ func FetchAttackerProfile(ctx context.Context, ip string, endTime time.Time) (At
 		{"$project": bson.M{
 			"hour": bson.M{
 				"$hour": bson.M{
-					"$add": []interface{}{"$timestamp", 8 * 60 * 60 * 1000}, // 添加8小时
+					"$add": []interface{}{"$timestamp", 8 * 60 * 60 * 1000}, // 添加8小时转换为北京时间
 				},
 			},
 		}},
