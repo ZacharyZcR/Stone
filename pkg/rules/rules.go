@@ -275,6 +275,26 @@ func GetInterceptionRule(name string) (Pattern, bool) {
 	return Pattern{}, false
 }
 
+// GetInterceptionRulesWithPagination 获取分页的拦截规则
+func GetInterceptionRulesWithPagination(page, pageSize int) ([]Pattern, int) {
+	rulesMutex.RLock()
+	defer rulesMutex.RUnlock()
+
+	totalCount := len(interceptionRules.Rules)
+	startIndex := (page - 1) * pageSize
+	endIndex := startIndex + pageSize
+
+	if startIndex >= totalCount {
+		return []Pattern{}, totalCount
+	}
+
+	if endIndex > totalCount {
+		endIndex = totalCount
+	}
+
+	return interceptionRules.Rules[startIndex:endIndex], totalCount
+}
+
 // AddInterceptionRule 添加新的拦截规则
 func AddInterceptionRule(rule Pattern) error {
 	rulesMutex.Lock()

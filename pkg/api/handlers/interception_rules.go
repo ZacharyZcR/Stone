@@ -4,6 +4,7 @@ import (
 	"Stone/pkg/rules"
 	"github.com/gin-gonic/gin"
 	"net/http"
+	"strconv"
 )
 
 // HandleInterceptionRules 处理拦截规则的操作
@@ -12,9 +13,17 @@ func HandleInterceptionRules(c *gin.Context) {
 	case http.MethodGet:
 		name := c.Param("name")
 		if name == "" {
-			// 获取所有拦截规则
-			currentRules := rules.GetInterceptionRules()
-			c.JSON(http.StatusOK, currentRules)
+			// 获取所有拦截规则（带分页）
+			page, _ := strconv.Atoi(c.DefaultQuery("page", "1"))
+			pageSize, _ := strconv.Atoi(c.DefaultQuery("pageSize", "20"))
+
+			currentRules, totalCount := rules.GetInterceptionRulesWithPagination(page, pageSize)
+			c.JSON(http.StatusOK, gin.H{
+				"rules":      currentRules,
+				"totalCount": totalCount,
+				"page":       page,
+				"pageSize":   pageSize,
+			})
 		} else {
 			// 获取特定名称的规则
 			rule, found := rules.GetInterceptionRule(name)
