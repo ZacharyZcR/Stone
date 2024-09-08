@@ -99,3 +99,21 @@ func GetIPStats(c *gin.Context) {
 		"status":        status,
 	})
 }
+
+func GetAttackerProfile(c *gin.Context) {
+	ip := c.Query("ip")
+	if ip == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "IP参数是必须的"})
+		return
+	}
+
+	endTime := time.Now()
+
+	profile, err := logging.FetchAttackerProfile(c.Request.Context(), ip, endTime)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "获取攻击者画像失败"})
+		return
+	}
+
+	c.JSON(http.StatusOK, profile)
+}
