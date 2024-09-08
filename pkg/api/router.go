@@ -74,6 +74,9 @@ func SetupRouter(configCollection *mongo.Collection, userCollection *mongo.Colle
 		// 日志查看API
 		authenticated.GET("/logs", handlers.GetLogs)
 
+		// 新增的IP统计API
+		authenticated.GET("/ip-stats", handlers.GetIPStats)
+
 		// 控制二维码接口状态的API
 		authenticated.GET("/auth/qrcode/status", handlers.SetQRCodeStatus)
 		authenticated.POST("/auth/qrcode/status", handlers.SetQRCodeStatus)

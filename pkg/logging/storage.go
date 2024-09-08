@@ -145,3 +145,45 @@ func FetchLogsFromMongoWithFilters(ctx context.Context, page, pageSize int, star
 
 	return logs, totalCount, nil
 }
+
+// FetchIPStatsFromMongo 从MongoDB中检索IP访问统计
+func FetchIPStatsFromMongo(ctx context.Context, startDateTime, endDateTime time.Time, status string) ([]bson.M, error) {
+	// 构建过滤条件
+	filter := bson.M{
+		"timestamp": bson.M{
+			"$gte": startDateTime,
+			"$lte": endDateTime,
+		},
+	}
+
+	// 添加状态过滤条件
+	if status == "blocked" {
+		filter["status"] = bson.M{"$ne": "success"}
+	} else if status == "passed" {
+		filter["status"] = "success"
+	}
+
+	// 构建聚合管道
+	pipeline := []bson.M{
+		{"$match": filter},
+		{"$group": bson.M{
+			"_id":   "$client_ip",
+			"count": bson.M{"$sum": 1},
+		}},
+		{"$sort": bson.M{"count": -1}},
+	}
+
+	// 执行聚合查询
+	cursor, err := mongoCollection.Aggregate(ctx, pipeline)
+	if err != nil {
+		return nil, fmt.Errorf("执行聚合查询失败: %v", err)
+	}
+	defer cursor.Close(ctx)
+
+	var results []bson.M
+	if err = cursor.All(ctx, &results); err != nil {
+		return nil, fmt.Errorf("解析聚合结果失败: %v", err)
+	}
+
+	return results, nil
+}
