@@ -191,53 +191,6 @@ export default {
       return { labels, datasets }
     })
 
-    const chartOptions = {
-      responsive: true,
-      maintainAspectRatio: false,
-      plugins: {
-        legend: {
-          position: 'top',
-          labels: {
-            font: {
-              size: 14
-            },
-            color: '#FFFFFF' // 白色文字
-          }
-        },
-        tooltip: {
-          mode: 'index',
-          intersect: false,
-          backgroundColor: 'rgba(0, 0, 0, 0.8)',
-          titleColor: '#FFFFFF',
-          bodyColor: '#FFFFFF',
-          borderColor: '#FFFFFF',
-          borderWidth: 1
-        }
-      },
-      scales: {
-        x: {
-          grid: {
-            color: 'rgba(255, 255, 255, 0.1)' // 淡白色网格线
-          },
-          ticks: {
-            color: '#FFFFFF' // 白色文字
-          }
-        },
-        y: {
-          beginAtZero: true,
-          grid: {
-            color: 'rgba(255, 255, 255, 0.1)' // 淡白色网格线
-          },
-          ticks: {
-            color: '#FFFFFF', // 白色文字
-            callback: function(value) {
-              return value.toLocaleString() // 格式化大数字
-            }
-          }
-        }
-      }
-    }
-
     onMounted(() => {
       fetchMetrics().then(() => {
         animateNumbers()
@@ -250,7 +203,6 @@ export default {
       metrics,
       activityLogs,
       chartData,
-      chartOptions
     }
   }
 }
