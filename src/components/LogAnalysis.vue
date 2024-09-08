@@ -70,28 +70,28 @@
     <!-- 页脚 -->
     <FooterPage />
 
-    <!-- 详情模态框 -->
-    <div v-if="selectedLog" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center">
-      <div class="bg-gray-800 p-6 rounded-lg shadow-md w-1/2">
-        <h2 class="text-2xl font-bold mb-4">流量详情</h2>
-        <pre class="text-white">{{ JSON.stringify(selectedLog, null, 2) }}</pre>
-        <button @click="selectedLog = null" class="bg-red-500 text-white px-4 py-2 rounded hover:bg-red-700 mt-4">关闭</button>
-      </div>
-    </div>
+    <!-- 日志详情模态框 -->
+    <LogDetailModal
+        v-if="selectedLog"
+        :log="selectedLog"
+        @close="selectedLog = null"
+    />
   </div>
 </template>
 
 <script>
 import { ref } from 'vue';
-import api from '../api/axiosInstance'; // 导入配置好的 Axios 实例
+import api from '../api/axiosInstance';
 import HeaderPage from './HeaderPage.vue';
 import FooterPage from './FooterPage.vue';
+import LogDetailModal from './LogDetailModal.vue';
 
 export default {
   name: 'LogAnalysis',
   components: {
     HeaderPage,
-    FooterPage
+    FooterPage,
+    LogDetailModal
   },
   setup() {
     const logs = ref([]);
@@ -115,7 +115,7 @@ export default {
           endDateTime: formatToRFC3339(filters.value.endDateTime),
           ip: filters.value.ip
         };
-        const response = await api.get('/logs', { params }); // 使用 Axios 实例
+        const response = await api.get('/logs', { params });
         logs.value = response.data;
       } catch (error) {
         console.error('获取日志失败:', error);
