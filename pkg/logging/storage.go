@@ -88,8 +88,8 @@ func LogTraffic(logData map[string]interface{}) error {
 	return nil
 }
 
-// FetchLogsFromMongoWithFilters 从MongoDB中检索日志，支持过滤
-func FetchLogsFromMongoWithFilters(ctx context.Context, limit int64, startDateTime, endDateTime time.Time, ip string) ([]bson.M, error) {
+// FetchLogsFromMongoWithFilters 从MongoDB中检索日志，支持过滤和分页
+func FetchLogsFromMongoWithFilters(ctx context.Context, page, pageSize int, startDateTime, endDateTime time.Time, ip, status string) ([]bson.M, int64, error) {
 	// 构建过滤条件
 	filter := bson.D{}
 
@@ -110,22 +110,38 @@ func FetchLogsFromMongoWithFilters(ctx context.Context, limit int64, startDateTi
 		filter = append(filter, bson.E{"client_ip", ip})
 	}
 
+	// 添加状态过滤条件
+	if status != "" {
+		if status == "blocked" {
+			filter = append(filter, bson.E{"status", bson.M{"$ne": "success"}})
+		} else if status == "passed" {
+			filter = append(filter, bson.E{"status", "success"})
+		}
+	}
+
+	// 计算总记录数
+	totalCount, err := mongoCollection.CountDocuments(ctx, filter)
+	if err != nil {
+		return nil, 0, fmt.Errorf("计算总记录数失败: %v", err)
+	}
+
 	// 设置查询选项
 	findOptions := options.Find()
-	findOptions.SetLimit(limit)
 	findOptions.SetSort(bson.D{{"timestamp", -1}}) // 按时间倒序排列
+	findOptions.SetSkip(int64((page - 1) * pageSize))
+	findOptions.SetLimit(int64(pageSize))
 
 	// 执行查询
 	cursor, err := mongoCollection.Find(ctx, filter, findOptions)
 	if err != nil {
-		return nil, fmt.Errorf("检索日志失败: %v", err)
+		return nil, 0, fmt.Errorf("检索日志失败: %v", err)
 	}
 	defer cursor.Close(ctx)
 
 	var logs []bson.M
 	if err = cursor.All(ctx, &logs); err != nil {
-		return nil, fmt.Errorf("解析日志失败: %v", err)
+		return nil, 0, fmt.Errorf("解析日志失败: %v", err)
 	}
 
-	return logs, nil
+	return logs, totalCount, nil
 }
