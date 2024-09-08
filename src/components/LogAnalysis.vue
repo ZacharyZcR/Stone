@@ -1,76 +1,23 @@
 <template>
   <div class="bg-gray-900 text-white flex flex-col min-h-screen">
-    <!-- 顶部导航栏 -->
     <HeaderPage />
 
-    <!-- 主体内容 -->
     <div class="container mx-auto px-4 py-8 flex-1 mt-16">
-      <!-- 日志过滤器 -->
-      <div class="bg-gray-800 p-6 rounded-lg shadow-md mb-8">
-        <h2 class="text-2xl font-bold mb-4">日志过滤器 🔍</h2>
-        <form class="grid grid-cols-1 md:grid-cols-4 gap-4" @submit.prevent="applyFilter">
-          <div>
-            <label class="block text-gray-300 text-sm font-bold mb-2" for="startDateTime">开始时间</label>
-            <input v-model="filters.startDateTime" class="shadow appearance-none border-2 border-gray-700 rounded w-full py-2 px-3 bg-gray-900 text-white leading-tight focus:outline-none focus:shadow-outline focus:border-indigo-500 transition duration-300" id="startDateTime" type="datetime-local">
-          </div>
-          <div>
-            <label class="block text-gray-300 text-sm font-bold mb-2" for="endDateTime">结束时间</label>
-            <input v-model="filters.endDateTime" class="shadow appearance-none border-2 border-gray-700 rounded w-full py-2 px-3 bg-gray-900 text-white leading-tight focus:outline-none focus:shadow-outline focus:border-indigo-500 transition duration-300" id="endDateTime" type="datetime-local">
-          </div>
-          <div>
-            <label class="block text-gray-300 text-sm font-bold mb-2" for="ipFilter">IP 地址</label>
-            <input v-model="filters.ip" class="shadow appearance-none border-2 border-gray-700 rounded w-full py-2 px-3 bg-gray-900 text-white leading-tight focus:outline-none focus:shadow-outline focus:border-indigo-500 transition duration-300" id="ipFilter" type="text" placeholder="输入 IP 地址">
-          </div>
-          <div class="flex items-end">
-            <button class="bg-indigo-500 text-white px-4 py-2 rounded hover:bg-indigo-700 transform hover:scale-105 transition duration-300 w-full" type="submit">
-              应用过滤器 ✅
-            </button>
-          </div>
-        </form>
-      </div>
-
-      <!-- 日志记录 -->
-      <div class="bg-gray-800 p-6 rounded-lg shadow-md mb-8">
-        <h2 class="text-2xl font-bold mb-4">日志记录 📜</h2>
-        <table class="min-w-full bg-gray-800">
-          <thead>
-          <tr>
-            <th class="py-2 px-4 border-b-2 border-gray-700 text-left">源 IP</th>
-            <th class="py-2 px-4 border-b-2 border-gray-700 text-left">HTTP 方法</th>
-            <th class="py-2 px-4 border-b-2 border-gray-700 text-left">目标 IP</th>
-            <th class="py-2 px-4 border-b-2 border-gray-700 text-left">URL</th>
-            <th class="py-2 px-4 border-b-2 border-gray-700 text-left">时间戳</th>
-            <th class="py-2 px-4 border-b-2 border-gray-700 text-left">操作</th>
-          </tr>
-          </thead>
-          <tbody>
-          <tr v-for="log in logs" :key="log._id" class="hover:bg-gray-700 transition duration-300 animate-fade-in-up">
-            <td class="py-2 px-4 border-b border-gray-700 text-left">{{ log.client_ip }}</td>
-            <td class="py-2 px-4 border-b border-gray-700 text-left">{{ log.method || 'N/A' }}</td>
-            <td class="py-2 px-4 border-b border-gray-700 text-left">{{ log.target_ip }}</td>
-            <td class="py-2 px-4 border-b border-gray-700 text-left">{{ log.url || 'N/A' }}</td>
-            <td class="py-2 px-4 border-b border-gray-700 text-left">{{ formatTimestamp(log.timestamp) }}</td>
-            <td class="py-2 px-4 border-b border-gray-700 text-left">
-              <button @click="viewDetails(log)" class="bg-blue-500 text-white px-4 py-2 rounded hover:bg-blue-700 transform hover:scale-105 transition duration-300">查看详情 🔍</button>
-            </td>
-          </tr>
-          </tbody>
-        </table>
-      </div>
-
-      <!-- 统计分析 -->
-      <div class="bg-gray-800 p-6 rounded-lg shadow-md">
-        <h2 class="text-2xl font-bold mb-4">统计分析 📊</h2>
-        <div class="h-64 bg-gray-700 flex items-center justify-center animate-pulse">
-          <span class="text-gray-400">图表占位符 📊</span>
-        </div>
-      </div>
+      <LogFilter @filter-applied="applyFilter" />
+      <LogTable :logs="logs" @view-details="viewDetails" />
+      <LogPagination
+          :current-page="currentPage"
+          :total-pages="totalPages"
+          :total-count="totalCount"
+          :page-size="pageSize"
+          @page-changed="changePage"
+          @page-size-changed="changePageSize"
+      />
+      <StatisticsChart class="mt-8" /> <!-- 添加 mt-8 类来增加顶部边距 -->
     </div>
 
-    <!-- 页脚 -->
     <FooterPage />
 
-    <!-- 日志详情模态框 -->
     <LogDetailModal
         v-if="selectedLog"
         :log="selectedLog"
@@ -80,10 +27,14 @@
 </template>
 
 <script>
-import { ref } from 'vue';
+import { ref, computed } from 'vue';
 import api from '../api/axiosInstance';
 import HeaderPage from './HeaderPage.vue';
 import FooterPage from './FooterPage.vue';
+import LogFilter from './LogFilter.vue';
+import LogTable from './LogTable.vue';
+import LogPagination from './LogPagination.vue';
+import StatisticsChart from './StatisticsChart.vue';
 import LogDetailModal from './LogDetailModal.vue';
 
 export default {
@@ -91,69 +42,74 @@ export default {
   components: {
     HeaderPage,
     FooterPage,
+    LogFilter,
+    LogTable,
+    LogPagination,
+    StatisticsChart,
     LogDetailModal
   },
   setup() {
     const logs = ref([]);
-    const filters = ref({
-      startDateTime: '',
-      endDateTime: '',
-      ip: ''
-    });
     const selectedLog = ref(null);
+    const currentPage = ref(1);
+    const pageSize = ref(20);
+    const totalCount = ref(0);
+    const filters = ref({});
 
-    const formatToRFC3339 = (datetime) => {
-      if (!datetime) return '';
-      const date = new Date(datetime);
-      return date.toISOString();
-    };
+    const totalPages = computed(() => Math.ceil(totalCount.value / pageSize.value));
 
     const fetchLogs = async () => {
       try {
         const params = {
-          startDateTime: formatToRFC3339(filters.value.startDateTime),
-          endDateTime: formatToRFC3339(filters.value.endDateTime),
-          ip: filters.value.ip
+          ...filters.value,
+          page: currentPage.value,
+          pageSize: pageSize.value
         };
         const response = await api.get('/logs', { params });
-        logs.value = response.data;
+        logs.value = response.data.logs;
+        totalCount.value = response.data.totalCount;
+        currentPage.value = response.data.page;
       } catch (error) {
         console.error('获取日志失败:', error);
       }
     };
 
-    const applyFilter = () => {
+    const applyFilter = (newFilters) => {
+      filters.value = newFilters;
+      currentPage.value = 1;
       fetchLogs();
     };
 
-    const formatTimestamp = (timestamp) => {
-      return new Date(timestamp).toLocaleString();
+    const changePage = (page) => {
+      currentPage.value = page;
+      fetchLogs();
+    };
+
+    const changePageSize = (size) => {
+      pageSize.value = size;
+      currentPage.value = 1;
+      fetchLogs();
     };
 
     const viewDetails = (log) => {
       selectedLog.value = log;
     };
 
-    return { logs, filters, applyFilter, formatTimestamp, viewDetails, selectedLog };
+    // 初始加载
+    fetchLogs();
+
+    return {
+      logs,
+      selectedLog,
+      currentPage,
+      totalPages,
+      totalCount,
+      pageSize,
+      applyFilter,
+      changePage,
+      changePageSize,
+      viewDetails
+    };
   }
 };
 </script>
-
-<style>
-@import url('https://fonts.googleapis.com/css2?family=Roboto:wght@400;700&display=swap');
-
-@keyframes fade-in-up {
-  from {
-    opacity: 0;
-    transform: translateY(20px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
-}
-
-.animate-fade-in-up {
-  animation: fade-in-up 0.5s ease-out;
-}
-</style>
