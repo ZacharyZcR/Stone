@@ -139,6 +139,7 @@ export default {
     const fetchWeeklyMetrics = async () => {
       try {
         const endDate = new Date()
+        endDate.setHours(endDate.getHours() + 8) // 调整为北京时间
         const startDate = new Date(endDate)
         startDate.setDate(startDate.getDate() - 6)
 

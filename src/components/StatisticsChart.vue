@@ -76,8 +76,8 @@ export default {
   name: 'StatisticsChart',
   components: { Pie },
   setup() {
-    const startDate = ref(new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString().substr(0, 10));
-    const endDate = ref(new Date().toISOString().substr(0, 10));
+    const startDate = ref(getBeijingDate(new Date(Date.now() - 7 * 24 * 60 * 60 * 1000)));
+    const endDate = ref(getBeijingDate(new Date()));
     const accessType = ref('');
     const chartData = ref({
       labels: [],
@@ -89,12 +89,18 @@ export default {
     const chartKey = ref(0);
     const top10Data = ref([]);
 
+    // 将日期转换为北京时间的函数
+    function getBeijingDate(date) {
+      const beijingTime = new Date(date.getTime() + (8 * 60 * 60 * 1000));
+      return beijingTime.toISOString().substr(0, 10);
+    }
+
     const chartOptions = {
       responsive: true,
       maintainAspectRatio: false,
       plugins: {
         legend: {
-          display: false // 隐藏图例，因为我们有表格显示数据
+          display: false
         },
         tooltip: {
           callbacks: {
@@ -125,10 +131,19 @@ export default {
 
     const fetchData = async () => {
       try {
+        // 将日期转换为 YYYY-MM-DD 格式
+        const formatDate = (date) => {
+          const d = new Date(date);
+          return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+        };
+
+        const startDateTime = formatDate(startDate.value);
+        const endDateTime = formatDate(endDate.value);
+
         const response = await api.get('/ip-stats', {
           params: {
-            startDateTime: startDate.value,
-            endDateTime: endDate.value,
+            startDateTime: startDateTime,
+            endDateTime: endDateTime,
             status: accessType.value
           }
         });
