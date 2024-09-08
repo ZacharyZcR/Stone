@@ -30,6 +30,19 @@ func HandleInterceptionRules(c *gin.Context) {
 			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 			return
 		}
+		// 检查规则的必要字段是否为空
+		if newRule.Name == "" {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "Rule name cannot be empty"})
+			return
+		}
+		if newRule.Regex == "" {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "Rule regex cannot be empty"})
+			return
+		}
+		if newRule.Method == "" {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "Rule method cannot be empty"})
+			return
+		}
 		if err := rules.AddInterceptionRule(newRule); err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to add interception rule"})
 			return
@@ -37,6 +50,10 @@ func HandleInterceptionRules(c *gin.Context) {
 		c.JSON(http.StatusOK, gin.H{"status": "Interception rule added"})
 	case http.MethodDelete:
 		name := c.Param("name")
+		if name == "" {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "Rule name cannot be empty"})
+			return
+		}
 		if err := rules.DeleteInterceptionRule(name); err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to delete interception rule"})
 			return

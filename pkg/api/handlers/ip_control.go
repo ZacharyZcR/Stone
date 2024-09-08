@@ -30,6 +30,11 @@ func HandleIPControlRules(c *gin.Context) {
 			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 			return
 		}
+		// 检查 IP 是否为空
+		if newRule.IP == "" {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "IP address cannot be empty"})
+			return
+		}
 		if err := rules.AddIPRule(newRule); err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to add IP rule"})
 			return
@@ -37,6 +42,11 @@ func HandleIPControlRules(c *gin.Context) {
 		c.JSON(http.StatusOK, gin.H{"status": "IP rule added"})
 	case http.MethodDelete:
 		ip := c.Param("ip")
+		// 检查 IP 是否为空
+		if ip == "" {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "IP address cannot be empty"})
+			return
+		}
 		if err := rules.DeleteIPRule(ip); err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to delete IP rule"})
 			return

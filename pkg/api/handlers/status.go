@@ -94,7 +94,6 @@ type DailyMetrics struct {
 	BlockedByRulesTotal     int       `bson:"blockedByRulesTotal"`
 }
 
-// GetFirewallMetrics 获取防火墙相关的指标
 func GetFirewallMetrics(c *gin.Context) {
 	if metricsCollection == nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Metrics collection is not initialized"})
@@ -126,6 +125,9 @@ func GetFirewallMetrics(c *gin.Context) {
 		}
 	}
 
+	// 计算请求的天数
+	days := int(endDate.Sub(startDate).Hours()/24) + 1
+
 	// 查询指定日期范围内的指标
 	filter := bson.M{
 		"date": bson.M{
@@ -150,19 +152,35 @@ func GetFirewallMetrics(c *gin.Context) {
 		return
 	}
 
-	if len(metrics) == 0 {
-		c.JSON(http.StatusNotFound, gin.H{"error": "No metrics data found for the specified date range"})
-		return
+	// 构造响应，确保返回的数组长度等于请求的天数
+	response := make([]gin.H, days)
+	metricsMap := make(map[string]DailyMetrics)
+
+	// 将查询到的指标数据放入 map 中
+	for _, m := range metrics {
+		dateStr := m.Date.Format("2006-01-02")
+		metricsMap[dateStr] = m
 	}
 
-	// 构造响应
-	response := make([]gin.H, len(metrics))
-	for i, m := range metrics {
-		response[i] = gin.H{
-			"date":               m.Date.Format("2006-01-02"),
-			"success_requests":   m.WebsiteRequestsTotal,
-			"blacklist_requests": m.BlockedByBlacklistTotal,
-			"rules_requests":     m.BlockedByRulesTotal,
+	// 填充响应数组
+	for i := 0; i < days; i++ {
+		currentDate := startDate.AddDate(0, 0, i)
+		dateStr := currentDate.Format("2006-01-02")
+
+		if m, exists := metricsMap[dateStr]; exists {
+			response[i] = gin.H{
+				"date":               dateStr,
+				"success_requests":   m.WebsiteRequestsTotal,
+				"blacklist_requests": m.BlockedByBlacklistTotal,
+				"rules_requests":     m.BlockedByRulesTotal,
+			}
+		} else {
+			response[i] = gin.H{
+				"date":               dateStr,
+				"success_requests":   0,
+				"blacklist_requests": 0,
+				"rules_requests":     0,
+			}
 		}
 	}
 
