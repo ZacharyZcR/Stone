@@ -3,6 +3,9 @@
     <HeaderPage />
 
     <div class="container mx-auto px-4 py-8 flex-1 mt-16">
+      <!-- 将 StatisticsChart 移到最上面 -->
+      <StatisticsChart class="mb-8" /> <!-- 使用 mb-8 类来增加底部边距 -->
+
       <LogFilter @filter-applied="applyFilter" />
       <LogTable :logs="logs" @view-details="viewDetails" />
       <LogPagination
@@ -13,7 +16,6 @@
           @page-changed="changePage"
           @page-size-changed="changePageSize"
       />
-      <StatisticsChart class="mt-8" /> <!-- 添加 mt-8 类来增加顶部边距 -->
     </div>
 
     <FooterPage />
