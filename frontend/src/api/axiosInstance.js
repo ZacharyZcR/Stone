@@ -4,7 +4,7 @@ import axios from 'axios';
 
 // 创建一个 axios 实例
 const api = axios.create({
-    baseURL: 'http://172.20.2.226:8081',
+    baseURL: 'http://10.31.2.243:8083',
     withCredentials: true // 允许跨域请求发送 cookies
 });
 

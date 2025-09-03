@@ -20,7 +20,7 @@ func SetupRouter(configCollection *mongo.Collection, userCollection *mongo.Colle
 
 	// 配置CORS中间件
 	router.Use(cors.New(cors.Config{
-		AllowOrigins:     []string{"http://localhost:8080"}, // 允许的前端域名
+		AllowOrigins:     []string{"http://10.31.2.243:8084", "http://localhost:8084"}, // 允许的前端域名
 		AllowMethods:     []string{"GET", "POST", "PUT", "DELETE", "OPTIONS"},
 		AllowHeaders:     []string{"Origin", "Content-Type", "Accept", "Authorization"},
 		ExposeHeaders:    []string{"Content-Length"},
