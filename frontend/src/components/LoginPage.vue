@@ -1,102 +1,113 @@
 <template>
-  <div class="bg-gray-900 flex items-center justify-center min-h-screen">
-    <!-- 登录表单 -->
-    <div class="bg-gray-800 p-8 rounded-lg shadow-lg w-full max-w-md transform transition-all duration-700 ease-in-out hover:scale-105 opacity-0 translate-x-full animate-fade-in-right">
-      <h2 class="text-3xl font-bold mb-8 text-center text-white">登录 🔐</h2>
-      <form @submit.prevent="handleLogin">
-        <div class="mb-6">
-          <label class="block text-gray-300 text-sm font-bold mb-2" for="account">账户</label>
-          <input
-              v-model="account"
-              class="shadow-lg appearance-none border-3 border-gray-700 rounded-lg w-full py-3 px-4 bg-gray-900 text-white leading-tight focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition duration-300"
-              id="account"
-              type="text"
-              placeholder="输入账户名"
-          >
+  <div class="login-container">
+    <n-card class="login-form" :bordered="false">
+      <template #header>
+        <div class="login-header">
+          <n-h2>🔐 Stone 防火墙</n-h2>
+          <n-text depth="3">请输入您的认证信息</n-text>
         </div>
-        <div class="mb-8">
-          <label class="block text-gray-300 text-sm font-bold mb-2" for="code">验证码</label>
-          <input
-              v-model="code"
-              class="shadow-lg appearance-none border-3 border-gray-700 rounded-lg w-full py-3 px-4 bg-gray-900 text-white mb-3 leading-tight focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition duration-300"
-              id="code"
-              type="text"
-              placeholder="输入验证码"
+      </template>
+      
+      <n-form @submit.prevent="handleLogin" :model="formModel" ref="formRef" :rules="rules">
+        <n-form-item label="账户" path="account">
+          <n-input
+            v-model:value="formModel.account"
+            placeholder="请输入账户名"
+            size="large"
+            :input-props="{ autocomplete: 'username' }"
+          />
+        </n-form-item>
+        
+        <n-form-item label="验证码" path="code">
+          <n-input
+            v-model:value="formModel.code"
+            placeholder="请输入双因素认证码"
+            size="large"
+            :input-props="{ autocomplete: 'one-time-code' }"
+          />
+        </n-form-item>
+        
+        <div class="button-group">
+          <n-button
+            type="primary"
+            size="large"
+            :loading="loading"
+            @click="handleLogin"
+            block
           >
+            🚀 登录
+          </n-button>
+          
+          <n-button
+            type="info"
+            size="large"
+            @click="goToSetup2FA"
+            block
+          >
+            🔑 设置双因素认证
+          </n-button>
         </div>
-        <div class="flex flex-col space-y-4 mt-6">
-          <button
-              class="bg-blue-500 text-white px-6 py-3 rounded-lg hover:bg-blue-700 transform hover:scale-105 transition duration-300 border-2 border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-opacity-50"
-              type="submit"
-          >
-            登录 🚀
-          </button>
-          <button
-              @click="goToSetup2FA"
-              class="bg-green-500 text-white px-6 py-3 rounded-lg hover:bg-green-700 transform hover:scale-105 transition duration-300 border-2 border-green-400 focus:outline-none focus:ring-2 focus:ring-green-500 focus:ring-opacity-50"
-              type="button"
-          >
-            设置双因素认证 🔑
-          </button>
-        </div>
-      </form>
-    </div>
-
-    <!-- 弹窗组件 -->
-    <PopupNotification
-        v-if="showNotification"
-        :message="notificationMessage"
-        :emoji="notificationEmoji"
-        :type="notificationType"
-        @close="showNotification = false"
-    />
+      </n-form>
+    </n-card>
   </div>
 </template>
 
 <script>
-import { ref } from 'vue'
+import { ref, reactive } from 'vue'
 import { useRouter } from 'vue-router'
 import { useStore } from 'vuex'
-import PopupNotification from './PopupNotification.vue'
+import { useMessage } from 'naive-ui'
 
 export default {
   name: 'LoginPage',
-  components: {
-    PopupNotification
-  },
   setup() {
-    const account = ref('')
-    const code = ref('')
+    const formRef = ref(null)
     const router = useRouter()
     const store = useStore()
+    const message = useMessage()
+    const loading = ref(false)
 
-    const showNotification = ref(false)
-    const notificationMessage = ref('')
-    const notificationEmoji = ref('')
-    const notificationType = ref('success')
+    const formModel = reactive({
+      account: '',
+      code: ''
+    })
+
+    const rules = {
+      account: [
+        { required: true, message: '请输入账户名', trigger: 'blur' }
+      ],
+      code: [
+        { required: true, message: '请输入验证码', trigger: 'blur' },
+        { min: 6, max: 6, message: '验证码必须是6位数字', trigger: 'blur' }
+      ]
+    }
 
     const handleLogin = async () => {
       try {
+        await formRef.value?.validate()
+        loading.value = true
+        
         const success = await store.dispatch('login', {
-          account: account.value,
-          code: code.value
+          account: formModel.account,
+          code: formModel.code
         })
+        
         if (success) {
-          notificationMessage.value = '登录成功！欢迎回来！'
-          notificationEmoji.value = '🎉'
-          notificationType.value = 'success'
-          showNotification.value = true
+          message.success('🎉 登录成功！欢迎回来！')
           setTimeout(() => {
             router.push({ name: 'Home' })
-          }, 1500) // 延迟1.5秒后跳转，让用户有时间看到成功消息
+          }, 1000)
         } else {
           throw new Error('登录失败')
         }
       } catch (error) {
-        notificationMessage.value = '登录失败，请检查您的验证码和账户信息。'
-        notificationEmoji.value = '❌'
-        notificationType.value = 'error'
-        showNotification.value = true
+        if (error?.errors) {
+          // 表单验证错误
+          return
+        }
+        message.error('❌ 登录失败，请检查您的验证码和账户信息')
+      } finally {
+        loading.value = false
       }
     }
 
@@ -105,36 +116,44 @@ export default {
     }
 
     return {
-      account,
-      code,
+      formRef,
+      formModel,
+      rules,
+      loading,
       handleLogin,
-      goToSetup2FA,
-      showNotification,
-      notificationMessage,
-      notificationEmoji,
-      notificationType
+      goToSetup2FA
     }
   }
 }
 </script>
 
 <style scoped>
-@keyframes fade-in-right {
-  0% {
-    opacity: 0;
-    transform: translateX(100%);
-  }
-  100% {
-    opacity: 1;
-    transform: translateX(0);
-  }
+.login-container {
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
 }
 
-.animate-fade-in-right {
-  animation: fade-in-right 1s forwards;
+.login-form {
+  width: 100%;
+  max-width: 400px;
+  margin: 20px;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
+  border-radius: 12px;
+  backdrop-filter: blur(10px);
 }
 
-.border-3 {
-  border-width: 3px;
+.login-header {
+  text-align: center;
+  margin-bottom: 20px;
+}
+
+.button-group {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin-top: 24px;
 }
 </style>
