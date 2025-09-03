@@ -21,14 +21,14 @@ func main() {
 	logging.LogInfo("启动Stone防火墙")
 
 	// 初始化存储（Redis 和 MongoDB）
-	err := logging.InitStorage("localhost:6379", "mongodb://localhost:27017", "stoneDB", "logs")
+	err := logging.InitStorage("localhost:6379", "mongodb://localhost:27019", "stoneDB", "logs")
 	if err != nil {
 		logging.LogError(fmt.Errorf("初始化存储失败: %v", err))
 		return
 	}
 
 	// 获取MongoDB集合
-	client, err := mongo.Connect(context.Background(), options.Client().ApplyURI("mongodb://localhost:27017"))
+	client, err := mongo.Connect(context.Background(), options.Client().ApplyURI("mongodb://localhost:27019"))
 	if err != nil {
 		logging.LogError(fmt.Errorf("无法连接到MongoDB: %v", err))
 		return
@@ -80,7 +80,7 @@ func main() {
 	}()
 
 	router := api.SetupRouter(configCollection, userCollection) // 传递用户集合
-	if err := router.Run(":8081"); err != nil {
+	if err := router.Run(":8083"); err != nil {
 		log.Fatalf("启动API服务失败: %v", err)
 	}
 }

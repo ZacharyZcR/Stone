@@ -1,6 +1,6 @@
-module Stone
+module Stone/backend
 
-go 1.21rc3
+go 1.21
 
 require (
 	github.com/gin-gonic/gin v1.10.0

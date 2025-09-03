@@ -11,7 +11,7 @@ import (
 
 func main() {
 	// 初始化MongoDB客户端
-	client, err := mongo.Connect(context.Background(), options.Client().ApplyURI("mongodb://localhost:27017"))
+	client, err := mongo.Connect(context.Background(), options.Client().ApplyURI("mongodb://localhost:27019"))
 	if err != nil {
 		fmt.Printf("无法连接到MongoDB: %v\n", err)
 		return
