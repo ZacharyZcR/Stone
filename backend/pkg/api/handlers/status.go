@@ -1,7 +1,7 @@
 package handlers
 
 import (
-	"Stone/pkg/monitoring"
+	"Stone/backend/pkg/monitoring"
 	"context"
 	"github.com/gin-gonic/gin"
 	"github.com/shirou/gopsutil/cpu"

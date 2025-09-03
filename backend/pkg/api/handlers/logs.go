@@ -1,7 +1,7 @@
 package handlers
 
 import (
-	"Stone/pkg/logging"
+	"Stone/backend/pkg/logging"
 	"context"
 	"github.com/gin-gonic/gin"
 	"net/http"

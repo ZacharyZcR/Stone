@@ -1,8 +1,8 @@
 package api
 
 import (
-	"Stone/pkg/api/handlers"
-	"Stone/pkg/logging"
+	"Stone/backend/pkg/api/handlers"
+	"Stone/backend/pkg/logging"
 	"context"
 	"fmt"
 	"github.com/gin-contrib/cors"

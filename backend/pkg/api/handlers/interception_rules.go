@@ -1,7 +1,7 @@
 package handlers
 
 import (
-	"Stone/pkg/rules"
+	"Stone/backend/pkg/rules"
 	"github.com/gin-gonic/gin"
 	"net/http"
 	"strconv"

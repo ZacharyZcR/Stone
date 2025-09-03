@@ -3,7 +3,7 @@
 package utils
 
 import (
-	"Stone/pkg/logging"
+	"Stone/backend/pkg/logging"
 	"fmt"
 	"net/http"
 	"time"

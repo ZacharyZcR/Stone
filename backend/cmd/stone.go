@@ -1,13 +1,13 @@
 package main
 
 import (
-	"Stone/pkg/api"
-	"Stone/pkg/api/handlers"
-	"Stone/pkg/capture"
-	"Stone/pkg/config"
-	"Stone/pkg/logging"
-	"Stone/pkg/monitoring"
-	"Stone/pkg/rules"
+	"Stone/backend/pkg/api"
+	"Stone/backend/pkg/api/handlers"
+	"Stone/backend/pkg/capture"
+	"Stone/backend/pkg/config"
+	"Stone/backend/pkg/logging"
+	"Stone/backend/pkg/monitoring"
+	"Stone/backend/pkg/rules"
 	"context"
 	"fmt"
 	"go.mongodb.org/mongo-driver/mongo"

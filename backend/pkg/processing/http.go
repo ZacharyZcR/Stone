@@ -1,9 +1,9 @@
 package processing
 
 import (
-	"Stone/pkg/monitoring"
-	"Stone/pkg/rules"
-	"Stone/pkg/utils"
+	"Stone/backend/pkg/monitoring"
+	"Stone/backend/pkg/rules"
+	"Stone/backend/pkg/utils"
 	"bufio"
 	"fmt"
 	"io"
