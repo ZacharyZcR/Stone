@@ -5,16 +5,21 @@ import (
 	"github.com/gin-gonic/gin"
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/mongo"
+	"golang.org/x/crypto/bcrypt"
 	"net/http"
+	"time"
 )
 
-// 假设 userCollection 是一个已初始化的 MongoDB 集合
+// MongoDB 集合
 var userCollection *mongo.Collection
 
 type User struct {
-	Account    string `bson:"account" json:"account"`
-	Secret     string `bson:"secret" json:"-"`
-	LoginCount int    `bson:"loginCount" json:"loginCount"`
+	Username     string    `bson:"username" json:"username"`
+	PasswordHash string    `bson:"password_hash" json:"-"`
+	Role         string    `bson:"role" json:"role"`
+	Created      time.Time `bson:"created" json:"created"`
+	LastLogin    time.Time `bson:"last_login" json:"last_login"`
+	Active       bool      `bson:"active" json:"active"`
 }
 
 // SetUserCollection 设置用户集合
@@ -22,62 +27,86 @@ func SetUserCollection(collection *mongo.Collection) {
 	userCollection = collection
 }
 
-// HandleUsers 处理用户的CRUD操作
-func HandleUsers(c *gin.Context) {
-	switch c.Request.Method {
-	case http.MethodGet:
-		account := c.Param("account")
-		if account == "" {
-			cursor, err := userCollection.Find(context.Background(), bson.M{})
-			if err != nil {
-				c.JSON(http.StatusInternalServerError, gin.H{"error": "无法获取用户"})
-				return
-			}
-			defer cursor.Close(context.Background())
-
-			var users []User
-			if err := cursor.All(context.Background(), &users); err != nil {
-				c.JSON(http.StatusInternalServerError, gin.H{"error": "无法解析用户数据"})
-				return
-			}
-			c.JSON(http.StatusOK, users)
-		} else {
-			var user User
-			err := userCollection.FindOne(context.Background(), bson.M{"account": account}).Decode(&user)
-			if err != nil {
-				c.JSON(http.StatusNotFound, gin.H{"error": "用户未找到"})
-				return
-			}
-			c.JSON(http.StatusOK, user)
-		}
-
-	case http.MethodPost:
-		var newUser User
-		if err := c.ShouldBindJSON(&newUser); err != nil {
-			c.JSON(http.StatusBadRequest, gin.H{"error": "请求格式错误"})
-			return
-		}
-		_, err := userCollection.InsertOne(context.Background(), newUser)
-		if err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"error": "无法添加用户"})
-			return
-		}
-		c.JSON(http.StatusCreated, gin.H{"status": "用户已添加"})
-
-	case http.MethodDelete:
-		account := c.Param("account")
-		if account == "" {
-			c.JSON(http.StatusBadRequest, gin.H{"error": "需要提供用户名"})
-			return
-		}
-		_, err := userCollection.DeleteOne(context.Background(), bson.M{"account": account})
-		if err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"error": "无法删除用户"})
-			return
-		}
-		c.JSON(http.StatusOK, gin.H{"status": "用户已删除"})
-
-	default:
-		c.JSON(http.StatusMethodNotAllowed, gin.H{"error": "不支持的方法"})
+// CreateUser 创建新用户（仅管理员）
+func CreateUser(c *gin.Context) {
+	var request struct {
+		Username string `json:"username" binding:"required"`
+		Password string `json:"password" binding:"required,min=8"`
+		Role     string `json:"role" binding:"required"`
 	}
+
+	if err := c.ShouldBindJSON(&request); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "用户名、密码(至少8位)和角色是必需的"})
+		return
+	}
+
+	// 检查用户是否已存在
+	var existingUser User
+	err := userCollection.FindOne(context.Background(), bson.M{"username": request.Username}).Decode(&existingUser)
+	if err == nil {
+		c.JSON(http.StatusConflict, gin.H{"error": "用户名已存在"})
+		return
+	}
+
+	// 加密密码
+	hashedPassword, err := bcrypt.GenerateFromPassword([]byte(request.Password), bcrypt.DefaultCost)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "密码加密失败"})
+		return
+	}
+
+	newUser := User{
+		Username:     request.Username,
+		PasswordHash: string(hashedPassword),
+		Role:         request.Role,
+		Created:      time.Now(),
+		Active:       true,
+	}
+
+	_, err = userCollection.InsertOne(context.Background(), newUser)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "无法创建用户"})
+		return
+	}
+
+	c.JSON(http.StatusCreated, gin.H{"message": "用户创建成功", "username": request.Username})
+}
+
+// GetUsers 获取用户列表
+func GetUsers(c *gin.Context) {
+	cursor, err := userCollection.Find(context.Background(), bson.M{"active": true})
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "无法获取用户列表"})
+		return
+	}
+	defer cursor.Close(context.Background())
+
+	var users []User
+	if err := cursor.All(context.Background(), &users); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "无法解析用户数据"})
+		return
+	}
+
+	c.JSON(http.StatusOK, users)
+}
+
+// DeleteUser 删除用户（软删除）
+func DeleteUser(c *gin.Context) {
+	username := c.Param("username")
+	if username == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "用户名是必需的"})
+		return
+	}
+
+	_, err := userCollection.UpdateOne(
+		context.Background(),
+		bson.M{"username": username},
+		bson.M{"$set": bson.M{"active": false}},
+	)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "无法删除用户"})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"message": "用户已删除"})
 }

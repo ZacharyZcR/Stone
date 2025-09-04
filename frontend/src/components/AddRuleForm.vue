@@ -45,8 +45,3 @@ export default {
 };
 </script>
 
-<style scoped>
-.input-field {
-  @apply shadow appearance-none border-2 border-gray-700 rounded w-full py-2 px-3 bg-gray-900 text-white leading-tight focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition duration-300;
-}
-</style>

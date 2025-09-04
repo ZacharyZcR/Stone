@@ -56,16 +56,3 @@ export default {
 };
 </script>
 
-<style scoped>
-.table-header {
-  @apply py-2 px-4 border-b-2 border-gray-700 text-left;
-}
-
-.table-cell {
-  @apply py-2 px-4 border-b border-gray-700 text-left;
-}
-
-.details-button {
-  @apply bg-blue-500 text-white px-3 py-1 rounded-lg hover:bg-blue-700 transform hover:scale-105 transition duration-300 border-2 border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-opacity-50 text-sm;
-}
-</style>

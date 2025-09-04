@@ -1,84 +1,265 @@
 <template>
-  <div class="bg-gray-900 text-white flex flex-col min-h-screen animate-fade-in">
-    <!-- 顶部导航栏 -->
-    <HeaderPage />
+  <div style="padding: 24px; min-height: calc(100vh - 64px);">
+    <!-- 第一行：仪表盘标题 -->
+    <n-card size="large" style="margin-bottom: 24px;">
+      <n-space direction="vertical" size="medium" align="center">
+        <n-avatar size="huge" color="#2080f0">
+          <n-icon size="48">
+            <bar-chart-outline />
+          </n-icon>
+        </n-avatar>
+        
+        <n-space direction="vertical" size="small" align="center">
+          <n-h1 style="margin: 0; font-size: 2.5rem;">
+            <n-gradient-text type="primary">实时仪表盘</n-gradient-text>
+          </n-h1>
+          <n-text depth="3" style="font-size: 16px;">
+            WAF防护状态监控与流量分析
+          </n-text>
+        </n-space>
+      </n-space>
+    </n-card>
 
-    <!-- 主体内容 -->
-    <div class="container mx-auto px-4 py-8 flex-1 mt-16">
-      <!-- 统计卡片 -->
-      <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
-        <!-- 卡片 1 -->
-        <div class="bg-gray-800 p-6 rounded-lg shadow-md transform hover:scale-105 transition duration-500">
-          <div class="flex items-center">
-            <div class="text-green-400 text-3xl">✅</div>
-            <div class="ml-4">
-              <h3 class="text-xl font-bold">成功请求</h3>
-              <p class="text-2xl animate-number-scroll" :data-target="metrics.success_requests">{{ metrics.success_requests }}</p>
-            </div>
+    <!-- 第二行：核心指标统计 -->
+    <n-card title="今日防护统计" size="large" style="margin-bottom: 24px;">
+      <template #header-extra>
+        <n-button type="primary" @click="fetchMetrics" :loading="refreshing">
+          <template #icon>
+            <n-icon><refresh-outline /></n-icon>
+          </template>
+          刷新数据
+        </n-button>
+      </template>
+      
+      <n-grid :cols="4" :x-gap="24" responsive="screen">
+        <n-grid-item>
+          <n-card hoverable embedded>
+            <n-statistic label="成功请求" :value="metrics.success_requests" suffix="次">
+              <template #prefix>
+                <n-icon color="#18a058" size="24">
+                  <checkmark-circle-outline />
+                </n-icon>
+              </template>
+            </n-statistic>
+          </n-card>
+        </n-grid-item>
+        
+        <n-grid-item>
+          <n-card hoverable embedded>
+            <n-statistic label="黑名单拦截" :value="metrics.blacklist_requests" suffix="次">
+              <template #prefix>
+                <n-icon color="#d03050" size="24">
+                  <ban-outline />
+                </n-icon>
+              </template>
+            </n-statistic>
+          </n-card>
+        </n-grid-item>
+        
+        <n-grid-item>
+          <n-card hoverable embedded>
+            <n-statistic label="规则拦截" :value="metrics.rules_requests" suffix="次">
+              <template #prefix>
+                <n-icon color="#f0a020" size="24">
+                  <shield-outline />
+                </n-icon>
+              </template>
+            </n-statistic>
+          </n-card>
+        </n-grid-item>
+
+        <n-grid-item>
+          <n-card hoverable embedded>
+            <n-statistic label="拦截率" :value="blockRate" suffix="%">
+              <template #prefix>
+                <n-icon color="#2080f0" size="24">
+                  <analytics-outline />
+                </n-icon>
+              </template>
+            </n-statistic>
+          </n-card>
+        </n-grid-item>
+      </n-grid>
+    </n-card>
+
+    <!-- 第三行：双列布局 - 图表和实时活动 -->
+    <n-grid :cols="2" :x-gap="24" responsive="screen" style="margin-bottom: 24px;">
+      <!-- 左侧：流量趋势图表 -->
+      <n-grid-item>
+        <n-card title="最近7天流量趋势" size="large" style="height: 480px;">
+          <template #header-extra>
+            <n-space>
+              <n-tag type="success" size="medium">实时更新</n-tag>
+              <n-button size="small" quaternary @click="fetchWeeklyMetrics">
+                <template #icon>
+                  <n-icon><refresh-outline /></n-icon>
+                </template>
+              </n-button>
+            </n-space>
+          </template>
+          
+          <div style="height: 380px;">
+            <BarChart v-if="chartData.labels.length" :chartData="chartData" :chartOptions="chartOptions" />
+            <n-empty v-else description="暂无图表数据" style="height: 100%; display: flex; align-items: center; justify-content: center;">
+              <template #icon>
+                <n-icon size="48" color="#d0d0d0">
+                  <bar-chart-outline />
+                </n-icon>
+              </template>
+            </n-empty>
           </div>
-        </div>
-        <!-- 卡片 2 -->
-        <div class="bg-gray-800 p-6 rounded-lg shadow-md transform hover:scale-105 transition duration-500">
-          <div class="flex items-center">
-            <div class="text-red-400 text-3xl">🚫</div>
-            <div class="ml-4">
-              <h3 class="text-xl font-bold">黑名单请求</h3>
-              <p class="text-2xl animate-number-scroll" :data-target="metrics.blacklist_requests">{{ metrics.blacklist_requests }}</p>
-            </div>
+        </n-card>
+      </n-grid-item>
+
+      <!-- 右侧：实时活动日志 -->
+      <n-grid-item>
+        <n-card title="实时防护日志" size="large" style="height: 480px;">
+          <template #header-extra>
+            <n-badge :value="activityLogs.length" type="warning">
+              <n-icon size="20"><shield-checkmark-outline /></n-icon>
+            </n-badge>
+          </template>
+          
+          <div style="height: 380px; overflow-y: auto; padding-right: 8px;">
+            <n-timeline size="large">
+              <n-timeline-item 
+                v-for="(log, index) in activityLogs" 
+                :key="index"
+                :type="getLogType(log.type)"
+                :title="log.title"
+                :content="log.message"
+                :time="log.time"
+              />
+            </n-timeline>
           </div>
-        </div>
-        <!-- 卡片 3 -->
-        <div class="bg-gray-800 p-6 rounded-lg shadow-md transform hover:scale-105 transition duration-500">
-          <div class="flex items-center">
-            <div class="text-blue-400 text-3xl">📏</div>
-            <div class="ml-4">
-              <h3 class="text-xl font-bold">规则拦截</h3>
-              <p class="text-2xl animate-number-scroll" :data-target="metrics.rules_requests">{{ metrics.rules_requests }}</p>
-            </div>
-          </div>
-        </div>
-      </div>
+        </n-card>
+      </n-grid-item>
+    </n-grid>
 
-      <div class="bg-gray-800 p-6 rounded-lg shadow-md mb-8">
-        <h2 class="text-2xl font-bold mb-4">最近7天流量分析</h2>
-        <div class="h-80"> <!-- 增加高度 -->
-          <BarChart :chartData="chartData" :chartOptions="chartOptions" />
-        </div>
-      </div>
+    <!-- 第四行：威胁分析 -->
+    <n-card title="威胁情报分析" size="large" style="margin-bottom: 24px;">
+      <n-grid :cols="3" :x-gap="24" responsive="screen">
+        <n-grid-item>
+          <n-card hoverable embedded style="height: 180px;">
+            <n-space direction="vertical" align="center" justify="center" style="height: 100%;">
+              <n-avatar size="large" color="#d03050">
+                <n-icon size="28"><bug-outline /></n-icon>
+              </n-avatar>
+              <n-space direction="vertical" size="small" align="center">
+                <n-text strong style="font-size: 18px;">高危攻击</n-text>
+                <n-statistic :value="threatStats.high" suffix="次" style="font-size: 24px;" />
+                <n-text depth="3" style="font-size: 12px;">SQL注入、XSS等</n-text>
+              </n-space>
+            </n-space>
+          </n-card>
+        </n-grid-item>
 
-      <!-- 活动日志 -->
-      <div class="bg-gray-800 p-6 rounded-lg shadow-md">
-        <h2 class="text-2xl font-bold mb-4">最近活动</h2>
-        <ul class="space-y-4">
-          <li v-for="(log, index) in activityLogs" :key="index" class="flex items-start animate-fade-in-up">
-            <span class="text-blue-400 text-2xl mr-4">🕒</span>
-            <div>
-              <p class="font-bold">{{ log.time }}</p>
-              <p>{{ log.message }}</p>
-            </div>
-          </li>
-        </ul>
-      </div>
-    </div>
+        <n-grid-item>
+          <n-card hoverable embedded style="height: 180px;">
+            <n-space direction="vertical" align="center" justify="center" style="height: 100%;">
+              <n-avatar size="large" color="#f0a020">
+                <n-icon size="28"><warning-outline /></n-icon>
+              </n-avatar>
+              <n-space direction="vertical" size="small" align="center">
+                <n-text strong style="font-size: 18px;">中危攻击</n-text>
+                <n-statistic :value="threatStats.medium" suffix="次" style="font-size: 24px;" />
+                <n-text depth="3" style="font-size: 12px;">异常请求、扫描</n-text>
+              </n-space>
+            </n-space>
+          </n-card>
+        </n-grid-item>
 
-    <!-- 页脚 -->
-    <FooterPage />
+        <n-grid-item>
+          <n-card hoverable embedded style="height: 180px;">
+            <n-space direction="vertical" align="center" justify="center" style="height: 100%;">
+              <n-avatar size="large" color="#18a058">
+                <n-icon size="28"><shield-checkmark-outline /></n-icon>
+              </n-avatar>
+              <n-space direction="vertical" size="small" align="center">
+                <n-text strong style="font-size: 18px;">正常流量</n-text>
+                <n-statistic :value="threatStats.normal" suffix="次" style="font-size: 24px;" />
+                <n-text depth="3" style="font-size: 12px;">合法访问请求</n-text>
+              </n-space>
+            </n-space>
+          </n-card>
+        </n-grid-item>
+      </n-grid>
+    </n-card>
+
+    <!-- 第五行：快速操作面板 -->
+    <n-card title="快速操作" size="large">
+      <n-space size="large" justify="center">
+        <n-button-group size="large">
+          <n-button type="primary" @click="$router.push('/custom-rule')">
+            <template #icon>
+              <n-icon size="20"><add-outline /></n-icon>
+            </template>
+            添加规则
+          </n-button>
+          
+          <n-button @click="$router.push('/log-analysis')">
+            <template #icon>
+              <n-icon size="20"><document-text-outline /></n-icon>
+            </template>
+            查看日志
+          </n-button>
+          
+          <n-button @click="$router.push('/attacker-profile')">
+            <template #icon>
+              <n-icon size="20"><eye-outline /></n-icon>
+            </template>
+            攻击者画像
+          </n-button>
+          
+          <n-button @click="$router.push('/system-configuration')">
+            <template #icon>
+              <n-icon size="20"><settings-outline /></n-icon>
+            </template>
+            系统配置
+          </n-button>
+        </n-button-group>
+      </n-space>
+    </n-card>
   </div>
 </template>
 
 <script>
 import { ref, onMounted, computed } from 'vue'
-import HeaderPage from './HeaderPage.vue'
-import FooterPage from './FooterPage.vue'
 import BarChart from './BarChart.vue'
 import api from '../api/axiosInstance'
+import {
+  BarChartOutline,
+  CheckmarkCircleOutline,
+  BanOutline,
+  ShieldOutline,
+  AnalyticsOutline,
+  RefreshOutline,
+  ShieldCheckmarkOutline,
+  BugOutline,
+  WarningOutline,
+  AddOutline,
+  DocumentTextOutline,
+  EyeOutline,
+  SettingsOutline
+} from '@vicons/ionicons5'
 
 export default {
   name: 'WAFDashboard',
   components: {
-    HeaderPage,
-    FooterPage,
-    BarChart
+    BarChart,
+    BarChartOutline,
+    CheckmarkCircleOutline,
+    BanOutline,
+    ShieldOutline,
+    AnalyticsOutline,
+    RefreshOutline,
+    ShieldCheckmarkOutline,
+    BugOutline,
+    WarningOutline,
+    AddOutline,
+    DocumentTextOutline,
+    EyeOutline,
+    SettingsOutline
   },
   setup() {
     const metrics = ref({
@@ -87,21 +268,50 @@ export default {
       rules_requests: 0
     })
 
+    const refreshing = ref(false)
     const activityLogs = ref([])
+    const threatStats = ref({
+      high: 0,
+      medium: 0,
+      normal: 0
+    })
+
+    const blockRate = computed(() => {
+      const total = metrics.value.success_requests + metrics.value.blacklist_requests + metrics.value.rules_requests
+      if (total === 0) return 0
+      const blocked = metrics.value.blacklist_requests + metrics.value.rules_requests
+      return Math.round((blocked / total) * 100)
+    })
 
     const fetchMetrics = async () => {
+      refreshing.value = true
       try {
         const response = await api.get('/firewall/metrics')
         if (Array.isArray(response.data) && response.data.length > 0) {
           const latestMetrics = response.data[0]
+          // 注意：后端返回的字段名是snake_case
+          const successRequests = latestMetrics.success_requests || 0
+          const blacklistRequests = latestMetrics.blacklist_requests || 0
+          const rulesRequests = latestMetrics.rules_requests || 0
+          
           metrics.value = {
-            success_requests: latestMetrics.success_requests || 0,
-            blacklist_requests: latestMetrics.blacklist_requests || 0,
-            rules_requests: latestMetrics.rules_requests || 0
+            success_requests: successRequests,
+            blacklist_requests: blacklistRequests,
+            rules_requests: rulesRequests
+          }
+
+          // 更新威胁统计
+          threatStats.value = {
+            high: rulesRequests, // 规则拦截视为高危
+            medium: blacklistRequests, // 黑名单拦截视为中危
+            normal: successRequests // 成功请求视为正常
           }
         }
       } catch (error) {
         console.error('获取防火墙指标失败:', error)
+        // 保持默认数据
+      } finally {
+        refreshing.value = false
       }
     }
 
@@ -125,13 +335,71 @@ export default {
     }
 
     const fetchActivityLogs = async () => {
-      // 这里应该是从后端获取活动日志的逻辑
-      // 现在我们使用模拟数据
-      activityLogs.value = [
-        { time: '10:30 AM', message: '检测到 SQL 注入攻击，已成功阻止。💪' },
-        { time: '09:45 AM', message: '检测到 XSS 攻击，已成功阻止。🔒' },
-        { time: '08:20 AM', message: '异常流量增加，正在监控中。👀' }
-      ]
+      try {
+        // 从API获取最新日志数据
+        const response = await api.get('/logs', {
+          params: { page: 1, limit: 10 }
+        })
+        
+        if (response.data && response.data.logs) {
+          activityLogs.value = response.data.logs.map(log => {
+            const isBlocked = log.status !== 'success'
+            const timeAgo = formatTimeAgo(new Date(log.timestamp))
+            
+            return {
+              type: isBlocked ? 'error' : 'success',
+              title: isBlocked ? '攻击拦截' : '正常访问', 
+              message: `${log.client_ip} - ${log.method} ${log.url}${log.error ? ' (' + log.error + ')' : ''}`,
+              time: timeAgo
+            }
+          }).slice(0, 6) // 只显示最新6条
+        } else {
+          // 如果API无数据，使用少量默认数据
+          activityLogs.value = [
+            { 
+              type: 'info', 
+              title: '系统启动', 
+              message: 'Stone WAF 防护系统已启动', 
+              time: '刚才' 
+            }
+          ]
+        }
+      } catch (error) {
+        console.error('获取活动日志失败:', error)
+        // 使用简化的默认数据
+        activityLogs.value = [
+          { 
+            type: 'info', 
+            title: '系统运行中', 
+            message: '暂无日志数据，系统正常运行', 
+            time: '刚才' 
+          }
+        ]
+      }
+    }
+    
+    // 格式化时间为相对时间
+    const formatTimeAgo = (date) => {
+      const now = new Date()
+      const diffMs = now - date
+      const diffMins = Math.floor(diffMs / 60000)
+      const diffHours = Math.floor(diffMins / 60)
+      const diffDays = Math.floor(diffHours / 24)
+      
+      if (diffMins < 1) return '刚才'
+      if (diffMins < 60) return `${diffMins}分钟前`
+      if (diffHours < 24) return `${diffHours}小时前`
+      return `${diffDays}天前`
+    }
+
+    const getLogType = (type) => {
+      const typeMap = {
+        error: 'error',
+        warning: 'warning', 
+        info: 'info',
+        success: 'success'
+      }
+      return typeMap[type] || 'default'
     }
 
     const weeklyMetrics = ref([])
@@ -202,32 +470,33 @@ export default {
 
     return {
       metrics,
+      refreshing,
       activityLogs,
+      threatStats,
+      blockRate,
       chartData,
+      chartOptions: {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: {
+          legend: {
+            display: true,
+            position: 'top'
+          }
+        },
+        scales: {
+          y: {
+            beginAtZero: true
+          }
+        }
+      },
+      fetchMetrics,
+      fetchWeeklyMetrics,
+      getLogType
     }
   }
 }
 </script>
 
-<style>
-@import url('https://fonts.googleapis.com/css2?family=Roboto:wght@400;700&display=swap');
-
-@keyframes fade-in-up {
-  from {
-    opacity: 0;
-    transform: translateY(20px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
-}
-
-.animate-fade-in {
-  animation: fade-in 1s ease-out;
-}
-
-.animate-fade-in-up {
-  animation: fade-in-up 0.5s ease-out;
-}
+<style scoped>
 </style>

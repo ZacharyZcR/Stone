@@ -39,7 +39,8 @@ func AuthMiddleware(jwtSecret string) gin.HandlerFunc {
 		}
 
 		if claims, ok := token.Claims.(jwt.MapClaims); ok {
-			c.Set("account", claims["account"])
+			c.Set("username", claims["username"])
+			c.Set("role", claims["role"])
 			c.Next()
 		} else {
 			c.JSON(http.StatusUnauthorized, gin.H{"error": "未授权"})

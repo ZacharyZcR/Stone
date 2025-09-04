@@ -12,6 +12,7 @@ import (
 	"net"
 	"net/http"
 	"os"
+	"strings"
 )
 
 // HandleHTTPConnection 处理HTTP连接
@@ -35,9 +36,27 @@ func HandleHTTPConnection(clientConn net.Conn, targetAddress string) {
 		request, err := http.ReadRequest(reader)
 		if err != nil {
 			if err != io.EOF {
-				fmt.Println("读取HTTP请求失败:", err)
+				// 检查是否是TLS连接尝试
+				if strings.Contains(err.Error(), "malformed HTTP request") || strings.Contains(err.Error(), "invalid method") {
+					fmt.Printf("检测到非HTTP协议连接 (可能是HTTPS/TLS): %v\n", err)
+					// 返回426 Upgrade Required
+					upgradeResponse := "HTTP/1.1 426 Upgrade Required\r\n" +
+						"Upgrade: TLS/1.0, HTTP/1.1\r\n" +
+						"Connection: Upgrade\r\n" +
+						"Content-Type: text/html; charset=UTF-8\r\n" +
+						"Content-Length: 97\r\n" +
+						"\r\n" +
+						"<html><body><h1>426 Upgrade Required</h1><p>This service requires HTTPS/TLS.</p></body></html>"
+					
+					clientConn.Write([]byte(upgradeResponse))
+				} else {
+					fmt.Printf("读取HTTP请求失败: %v\n", err)
+				}
 			}
-			utils.LogTraffic(clientIP, targetAddress, "", "", nil, "", err.Error())
+			// 不记录TLS握手失败为错误日志，减少噪音
+			if !strings.Contains(err.Error(), "malformed HTTP request") {
+				utils.LogTraffic(clientIP, targetAddress, "", "", nil, "", err.Error())
+			}
 			return
 		}
 
@@ -68,8 +87,18 @@ func HandleHTTPConnection(clientConn net.Conn, targetAddress string) {
 		// 发送请求到目标服务
 		response, err := client.Do(request)
 		if err != nil {
-			fmt.Println("发送请求到目标服务失败:", err)
-			utils.LogTraffic(clientIP, targetAddress, request.URL.String(), request.Method, request.Header, "", err.Error())
+			fmt.Printf("目标服务不可用 %s: %v\n", targetAddress, err)
+			utils.LogTraffic(clientIP, targetAddress, request.URL.String(), request.Method, request.Header, "", fmt.Sprintf("目标服务不可用: %v", err))
+			
+			// 返回502 Bad Gateway错误给客户端
+			badGatewayResponse := "HTTP/1.1 502 Bad Gateway\r\n" +
+				"Content-Type: text/html; charset=UTF-8\r\n" +
+				"Content-Length: 85\r\n" +
+				"Connection: close\r\n" +
+				"\r\n" +
+				"<html><body><h1>502 Bad Gateway</h1><p>The upstream server is down.</p></body></html>"
+			
+			clientConn.Write([]byte(badGatewayResponse))
 			return
 		}
 
@@ -107,11 +136,12 @@ func sendBlockedResponse(conn net.Conn, filePath string) {
 		return
 	}
 
-	// 生成随机状态码（200到503之间）
-	randomStatusCode := rand.Intn(304) + 200
+	// 使用403 Forbidden状态码，符合WAF拦截语义
+	statusCode := 403
+	statusText := "Forbidden"
 
-	// 生成随机长度的随机字符串（5000到10000个字符）
-	randomLength := rand.Intn(5001) + 5000
+	// 生成随机长度的随机字符串（1000到3000个字符），减少资源消耗
+	randomLength := rand.Intn(2001) + 1000
 	randomString := make([]byte, randomLength)
 	for i := range randomString {
 		randomString[i] = byte(rand.Intn(94) + 33) // 可打印ASCII字符
@@ -121,12 +151,14 @@ func sendBlockedResponse(conn net.Conn, filePath string) {
 	htmlWithRandomString := []byte(fmt.Sprintf("%s\n<!-- %s -->", htmlContent, randomString))
 
 	// 构造响应
-	response := fmt.Sprintf("HTTP/1.1 %d \r\n"+
+	response := fmt.Sprintf("HTTP/1.1 %d %s\r\n"+
 		"Content-Type: text/html; charset=UTF-8\r\n"+
 		"Content-Length: %d\r\n"+
+		"Connection: close\r\n"+
 		"\r\n"+
 		"%s",
-		randomStatusCode,
+		statusCode,
+		statusText,
 		len(htmlWithRandomString),
 		htmlWithRandomString)
 

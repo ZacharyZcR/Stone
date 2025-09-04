@@ -1,133 +1,108 @@
 <template>
-  <nav class="bg-gradient-to-r from-gray-700 via-gray-800 to-gray-900 p-4 shadow-md fixed w-full z-10 transition-all duration-500">
-    <div class="container mx-auto flex justify-between items-center">
-      <div class="text-2xl font-bold text-white">🔒 Stone ⛰️ WAF 管理面板</div>
-      <div class="space-x-4">
+  <n-layout-header class="header-container" bordered>
+    <n-space justify="space-between" align="center" class="header-content">
+      <n-h2 class="header-title">
+        <n-text type="primary">🔒 Stone ⛰️ WAF 管理面板</n-text>
+      </n-h2>
+      
+      <n-space size="medium">
         <template v-if="!isAuthenticated">
-          <router-link to="/login" v-slot="{ navigate }">
-            <button
-                @click="navigate"
-                class="text-white hover:text-yellow-400 transition duration-300 transform hover:scale-105"
-            >
-              登录 🔐
-            </button>
-          </router-link>
-          <router-link to="/setup-2fa" v-slot="{ navigate }">
-            <button
-                @click="navigate"
-                class="text-white hover:text-yellow-400 transition duration-300 transform hover:scale-105"
-            >
-              注册 📱
-            </button>
-          </router-link>
+          <n-button 
+            text 
+            @click="$router.push('/login')"
+            class="nav-button"
+          >
+            🔐 登录
+          </n-button>
+          <n-button 
+            text 
+            @click="$router.push('/setup-2fa')"
+            class="nav-button"
+          >
+            📱 注册
+          </n-button>
         </template>
         <template v-else>
-          <router-link to="/" v-slot="{ navigate }">
-            <button
-                @click="navigate"
-                class="text-white hover:text-yellow-400 transition duration-300 transform hover:scale-105"
-            >
-              主页 🏠
-            </button>
-          </router-link>
-          <router-link to="/attacker-profile" v-slot="{ navigate }">
-            <button
-                @click="navigate"
-                class="text-white hover:text-yellow-400 transition duration-300 transform hover:scale-105"
-            >
-              攻击者画像追踪 🕵️
-            </button>
-          </router-link>
-          <router-link to="/custom-rule" v-slot="{ navigate }">
-            <button
-                @click="navigate"
-                class="text-white hover:text-yellow-400 transition duration-300 transform hover:scale-105"
-            >
-              规则管理 ⚙️
-            </button>
-          </router-link>
-          <router-link to="/log-analysis" v-slot="{ navigate }">
-            <button
-                @click="navigate"
-                class="text-white hover:text-yellow-400 transition duration-300 transform hover:scale-105"
-            >
-              日志分析 📜
-            </button>
-          </router-link>
-          <router-link to="/system-configuration" v-slot="{ navigate }">
-            <button
-                @click="navigate"
-                class="text-white hover:text-yellow-400 transition duration-300 transform hover:scale-105"
-            >
-              系统配置 ⚙️
-            </button>
-          </router-link>
-          <router-link to="/user-management" v-slot="{ navigate }">
-            <button
-                @click="navigate"
-                class="text-white hover:text-yellow-400 transition duration-300 transform hover:scale-105"
-            >
-              用户管理 👥
-            </button>
-          </router-link>
-          <router-link to="/dashboard" v-slot="{ navigate }">
-            <button
-                @click="navigate"
-                class="text-white hover:text-yellow-400 transition duration-300 transform hover:scale-105"
-            >
-              仪表盘 📊
-            </button>
-          </router-link>
-          <button
-              @click="handleLogout"
-              class="text-white hover:text-yellow-400 transition duration-300 transform hover:scale-105"
+          <n-button 
+            text 
+            @click="$router.push('/')"
+            class="nav-button"
           >
-            登出 🚪
-          </button>
+            🏠 主页
+          </n-button>
+          <n-button 
+            text 
+            @click="$router.push('/attacker-profile')"
+            class="nav-button"
+          >
+            🕵️ 攻击者画像
+          </n-button>
+          <n-button 
+            text 
+            @click="$router.push('/custom-rule')"
+            class="nav-button"
+          >
+            ⚙️ 规则管理
+          </n-button>
+          <n-button 
+            text 
+            @click="$router.push('/log-analysis')"
+            class="nav-button"
+          >
+            📜 日志分析
+          </n-button>
+          <n-button 
+            text 
+            @click="$router.push('/system-configuration')"
+            class="nav-button"
+          >
+            ⚙️ 系统配置
+          </n-button>
+          <n-button 
+            text 
+            @click="$router.push('/user-management')"
+            class="nav-button"
+          >
+            👥 用户管理
+          </n-button>
+          <n-button 
+            text 
+            @click="$router.push('/dashboard')"
+            class="nav-button"
+          >
+            📊 仪表盘
+          </n-button>
+          <n-button 
+            text 
+            @click="handleLogout"
+            class="nav-button logout-button"
+          >
+            🚪 登出
+          </n-button>
         </template>
-      </div>
-    </div>
-
-    <!-- 添加 PopupNotification 组件 -->
-    <PopupNotification
-        v-if="showNotification"
-        :message="notificationMessage"
-        :emoji="notificationEmoji"
-        :type="notificationType"
-        @close="showNotification = false"
-    />
-  </nav>
+      </n-space>
+    </n-space>
+  </n-layout-header>
 </template>
 
 <script>
-import { ref, computed } from 'vue'
+import { computed } from 'vue'
 import { useRouter } from 'vue-router'
 import { useStore } from 'vuex'
-import PopupNotification from './PopupNotification.vue'
+import { useMessage } from 'naive-ui'
 
 export default {
   name: 'HeaderPage',
-  components: {
-    PopupNotification
-  },
   setup() {
     const router = useRouter()
     const store = useStore()
-
-    const showNotification = ref(false)
-    const notificationMessage = ref('')
-    const notificationEmoji = ref('')
-    const notificationType = ref('success')
+    const message = useMessage()
 
     const handleLogout = async () => {
       await store.dispatch('logout')
-
-      notificationMessage.value = '登出成功！期待您的再次访问！'
-      notificationEmoji.value = '👋'
-      notificationType.value = 'success'
-      showNotification.value = true
-
-      // 使用 setTimeout 延迟 1.5 秒后跳转
+      
+      message.success('👋 登出成功！期待您的再次访问！')
+      
       setTimeout(() => {
         router.push({ name: 'Home' })
       }, 1500)
@@ -135,12 +110,46 @@ export default {
 
     return {
       isAuthenticated: computed(() => store.state.isAuthenticated),
-      handleLogout,
-      showNotification,
-      notificationMessage,
-      notificationEmoji,
-      notificationType
+      handleLogout
     }
   }
 }
 </script>
+
+<style scoped>
+.header-container {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 1000;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  backdrop-filter: blur(10px);
+}
+
+.header-content {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 0 20px;
+  height: 64px;
+}
+
+.header-title {
+  margin: 0;
+  color: white;
+}
+
+.nav-button {
+  color: white;
+  transition: all 0.3s ease;
+}
+
+.nav-button:hover {
+  color: #fbbf24;
+  transform: translateY(-1px);
+}
+
+.logout-button:hover {
+  color: #f87171;
+}
+</style>

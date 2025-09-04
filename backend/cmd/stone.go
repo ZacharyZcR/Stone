@@ -37,7 +37,6 @@ func main() {
 
 	configCollection := client.Database("stoneDB").Collection("config")
 	rulesCollection := client.Database("stoneDB").Collection("rules")
-	totpCollection := client.Database("stoneDB").Collection("totp")
 	userCollection := client.Database("stoneDB").Collection("users") // 新增的用户集合
 	metricsCollection := client.Database("stoneDB").Collection("metrics")
 
@@ -45,7 +44,6 @@ func main() {
 	config.SetMongoCollection(configCollection)
 	rules.SetMongoCollection(rulesCollection)
 	monitoring.SetMongoCollection(metricsCollection)
-	handlers.SetTOTPCollection(totpCollection)
 	handlers.SetUserCollection(userCollection) // 设置用户集合
 	handlers.SetMetricsCollection(metricsCollection)
 
@@ -80,6 +78,9 @@ func main() {
 	}()
 
 	router := api.SetupRouter(configCollection, userCollection) // 传递用户集合
+	if router == nil {
+		log.Fatal("创建路由失败：请设置JWT_SECRET环境变量")
+	}
 	if err := router.Run(":8083"); err != nil {
 		log.Fatalf("启动API服务失败: %v", err)
 	}

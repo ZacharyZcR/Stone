@@ -74,12 +74,3 @@ export default {
 };
 </script>
 
-<style scoped>
-.page-size-select {
-  @apply bg-gray-700 text-white border border-gray-600 rounded px-2 py-1 focus:outline-none focus:ring-2 focus:ring-blue-500;
-}
-
-.pagination-button {
-  @apply bg-blue-500 text-white px-3 py-1 rounded-lg hover:bg-blue-700 transition duration-300 disabled:opacity-50 disabled:cursor-not-allowed;
-}
-</style>

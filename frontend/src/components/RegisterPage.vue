@@ -1,9 +1,9 @@
 <template>
   <n-config-provider :theme="null">
-    <n-layout class="login-layout">
+    <n-layout class="register-layout">
       <n-layout-content>
-        <div class="login-container">
-          <n-grid :cols="2" :x-gap="0" responsive="screen" class="login-grid">
+        <div class="register-container">
+          <n-grid :cols="2" :x-gap="0" responsive="screen" class="register-grid">
             <!-- 品牌展示区域 -->
             <n-grid-item class="brand-area">
               <n-card :bordered="false" class="brand-card">
@@ -35,24 +35,24 @@
                       <n-icon size="20" color="#18a058">
                         <checkmark-circle-outline />
                       </n-icon>
-                      <n-text>安全认证</n-text>
+                      <n-text>安全认证体系</n-text>
                     </n-space>
                   </n-space>
                 </n-space>
               </n-card>
             </n-grid-item>
 
-            <!-- 登录表单区域 -->
+            <!-- 注册表单区域 -->
             <n-grid-item class="form-area">
               <n-card :bordered="false" class="form-card">
                 <n-space direction="vertical" size="large">
                   <n-space direction="vertical" align="center" size="small">
-                    <n-h2>欢迎回来</n-h2>
-                    <n-text depth="3">请输入您的凭据以访问系统</n-text>
+                    <n-h2>创建账户</n-h2>
+                    <n-text depth="3">注册后即可使用系统功能</n-text>
                   </n-space>
 
                   <n-form 
-                    @submit.prevent="handleLogin" 
+                    @submit.prevent="handleRegister" 
                     :model="formModel" 
                     ref="formRef" 
                     :rules="rules"
@@ -60,7 +60,7 @@
                     <n-form-item path="username" :show-label="false">
                       <n-input
                         v-model:value="formModel.username"
-                        placeholder="用户名"
+                        placeholder="用户名 (3-20位字符)"
                         size="large"
                         :input-props="{ autocomplete: 'username' }"
                       >
@@ -75,15 +75,32 @@
                     <n-form-item path="password" :show-label="false">
                       <n-input
                         v-model:value="formModel.password"
-                        placeholder="密码"
+                        placeholder="密码 (至少8位字符)"
                         type="password"
                         show-password-on="mousedown"
                         size="large"
-                        :input-props="{ autocomplete: 'current-password' }"
+                        :input-props="{ autocomplete: 'new-password' }"
                       >
                         <template #prefix>
                           <n-icon>
                             <key-outline />
+                          </n-icon>
+                        </template>
+                      </n-input>
+                    </n-form-item>
+
+                    <n-form-item path="confirmPassword" :show-label="false">
+                      <n-input
+                        v-model:value="formModel.confirmPassword"
+                        placeholder="确认密码"
+                        type="password"
+                        show-password-on="mousedown"
+                        size="large"
+                        :input-props="{ autocomplete: 'new-password' }"
+                      >
+                        <template #prefix>
+                          <n-icon>
+                            <lock-closed-outline />
                           </n-icon>
                         </template>
                       </n-input>
@@ -95,27 +112,26 @@
                           type="primary"
                           size="large"
                           :loading="loading"
-                          @click="handleLogin"
+                          @click="handleRegister"
                           block
                         >
-                          登录
+                          注册账户
                         </n-button>
                         
                         <n-button
                           secondary
                           size="large"
-                          @click="goToRegister"
+                          @click="goToLogin"
                           block
                         >
-                          没有账户？立即注册
+                          已有账户？立即登录
                         </n-button>
-                        
                       </n-space>
                     </n-form-item>
                   </n-form>
 
                   <n-divider>
-                    <n-text depth="3" style="font-size: 12px;">安全登录</n-text>
+                    <n-text depth="3" style="font-size: 12px;">安全注册</n-text>
                   </n-divider>
                 </n-space>
               </n-card>
@@ -130,76 +146,95 @@
 <script>
 import { ref, reactive } from 'vue'
 import { useRouter } from 'vue-router'
-import { useStore } from 'vuex'
 import { useMessage } from 'naive-ui'
+import api from '../api/axiosInstance'
 import { 
   PersonOutline, 
   KeyOutline, 
+  LockClosedOutline,
   ShieldCheckmarkOutline,
   CheckmarkCircleOutline 
 } from '@vicons/ionicons5'
 
 export default {
-  name: 'LoginPage',
+  name: 'RegisterPage',
   components: {
     PersonOutline,
     KeyOutline,
+    LockClosedOutline,
     ShieldCheckmarkOutline,
     CheckmarkCircleOutline
   },
   setup() {
     const formRef = ref(null)
     const router = useRouter()
-    const store = useStore()
     const message = useMessage()
     const loading = ref(false)
 
     const formModel = reactive({
       username: '',
-      password: ''
+      password: '',
+      confirmPassword: ''
     })
 
     const rules = {
       username: [
-        { required: true, message: '请输入用户名', trigger: 'blur' }
+        { required: true, message: '请输入用户名', trigger: 'blur' },
+        { min: 3, max: 20, message: '用户名长度为3-20个字符', trigger: 'blur' },
+        { pattern: /^[a-zA-Z0-9_]+$/, message: '用户名只能包含字母、数字和下划线', trigger: 'blur' }
       ],
       password: [
         { required: true, message: '请输入密码', trigger: 'blur' },
-        { min: 8, message: '密码至少8位', trigger: 'blur' }
+        { min: 8, message: '密码至少8位字符', trigger: 'blur' }
+      ],
+      confirmPassword: [
+        { required: true, message: '请确认密码', trigger: 'blur' },
+        {
+          validator: (rule, value) => {
+            return value === formModel.password
+          },
+          message: '两次输入的密码不一致',
+          trigger: 'blur'
+        }
       ]
     }
 
-    const handleLogin = async () => {
+    const handleRegister = async () => {
       try {
         await formRef.value?.validate()
         loading.value = true
         
-        const success = await store.dispatch('login', {
+        const response = await api.post('/auth/register', {
           username: formModel.username,
           password: formModel.password
         })
         
-        if (success) {
-          message.success('登录成功！欢迎回来！')
+        if (response.data.message === '注册成功') {
+          message.success('注册成功！请使用新账户登录')
           setTimeout(() => {
-            router.push({ name: 'WAFDashboard' })
+            router.push({ name: 'LoginPage' })
           }, 1000)
         } else {
-          throw new Error('登录失败')
+          throw new Error('注册失败')
         }
       } catch (error) {
         if (error?.errors) {
           return
         }
-        message.error('登录失败，请检查用户名和密码')
+        
+        let errorMsg = '注册失败，请稍后重试'
+        if (error.response?.data?.error) {
+          errorMsg = error.response.data.error
+        }
+        
+        message.error(errorMsg)
       } finally {
         loading.value = false
       }
     }
 
-
-    const goToRegister = () => {
-      router.push('/register')
+    const goToLogin = () => {
+      router.push('/login')
     }
 
     return {
@@ -207,20 +242,20 @@ export default {
       formModel,
       rules,
       loading,
-      handleLogin,
-      goToRegister
+      handleRegister,
+      goToLogin
     }
   }
 }
 </script>
 
 <style scoped>
-.login-layout {
+.register-layout {
   min-height: 100vh;
   background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
 }
 
-.login-container {
+.register-container {
   min-height: 100vh;
   display: flex;
   align-items: center;
@@ -228,7 +263,7 @@ export default {
   padding: 24px;
 }
 
-.login-grid {
+.register-grid {
   max-width: 1000px;
   width: 100%;
 }
@@ -251,11 +286,11 @@ export default {
 
 /* 响应式设计 */
 @media (max-width: 768px) {
-  .login-grid {
+  .register-grid {
     margin: 16px;
   }
   
-  .login-grid :deep(.n-grid) {
+  .register-grid :deep(.n-grid) {
     grid-template-columns: 1fr !important;
   }
   

@@ -3,14 +3,11 @@ package api
 import (
 	"Stone/backend/pkg/api/handlers"
 	"Stone/backend/pkg/logging"
-	"context"
 	"fmt"
 	"github.com/gin-contrib/cors"
-	"github.com/gin-contrib/sessions"
-	"github.com/gin-contrib/sessions/cookie"
 	"github.com/gin-gonic/gin"
-	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/mongo"
+	"os"
 	"time"
 )
 
@@ -20,7 +17,15 @@ func SetupRouter(configCollection *mongo.Collection, userCollection *mongo.Colle
 
 	// 配置CORS中间件
 	router.Use(cors.New(cors.Config{
-		AllowOrigins:     []string{"http://10.31.2.243:8084", "http://localhost:8084"}, // 允许的前端域名
+		AllowOrigins:     []string{
+			"http://10.31.2.243:8084", 
+			"http://localhost:8084",
+			"http://localhost:8085", 
+			"http://localhost:8086",
+			"http://127.0.0.1:8084",
+			"http://127.0.0.1:8085",
+			"http://127.0.0.1:8086",
+		}, // 允许的前端域名
 		AllowMethods:     []string{"GET", "POST", "PUT", "DELETE", "OPTIONS"},
 		AllowHeaders:     []string{"Origin", "Content-Type", "Accept", "Authorization"},
 		ExposeHeaders:    []string{"Content-Length"},
@@ -28,32 +33,23 @@ func SetupRouter(configCollection *mongo.Collection, userCollection *mongo.Colle
 		MaxAge:           12 * time.Hour,
 	}))
 
-	// 从数据库加载配置
-	var configResult struct {
-		Secrets struct {
-			SessionSecret string `bson:"sessionSecret"`
-			JWTSecret     string `bson:"jwtSecret"`
-		} `bson:"secrets"`
-	}
-	err := configCollection.FindOne(context.Background(), bson.M{"type": "config"}).Decode(&configResult)
-	if err != nil {
-		logging.LogError(fmt.Errorf("加载配置失败: %v", err))
+	// 从环境变量获取密钥
+	jwtSecret := os.Getenv("JWT_SECRET")
+	if jwtSecret == "" {
+		logging.LogError(fmt.Errorf("JWT_SECRET environment variable must be set"))
 		return nil
 	}
 
-	// 设置Session中间件
-	store := cookie.NewStore([]byte(configResult.Secrets.SessionSecret))
-	router.Use(sessions.Sessions("mysession", store))
+	// Session middleware removed - using JWT only
 
-	// 验证JWT的API
-	router.GET("/auth/check", handlers.CheckAuth(configResult.Secrets.JWTSecret))
-
-	router.GET("/auth/qrcode", handlers.GenerateQRCode)
-	router.POST("/auth/validate", handlers.ValidateTOTP(configResult.Secrets.JWTSecret))
+	// 认证API
+	router.POST("/auth/register", handlers.Register) // 公开注册
+	router.POST("/auth/login", handlers.Login(jwtSecret))
+	router.GET("/auth/check", handlers.CheckAuth(jwtSecret))
 
 	// 使用中间件进行鉴权
 	authenticated := router.Group("/")
-	authenticated.Use(AuthMiddleware(configResult.Secrets.JWTSecret))
+	authenticated.Use(AuthMiddleware(jwtSecret))
 
 	{
 		// 系统状态API
@@ -80,15 +76,11 @@ func SetupRouter(configCollection *mongo.Collection, userCollection *mongo.Colle
 		// 攻击者画像
 		authenticated.GET("/attacker-profile", handlers.GetAttackerProfile)
 
-		// 控制二维码接口状态的API
-		authenticated.GET("/auth/qrcode/status", handlers.SetQRCodeStatus)
-		authenticated.POST("/auth/qrcode/status", handlers.SetQRCodeStatus)
 
 		// 用户管理API
-		authenticated.GET("/users", handlers.HandleUsers)
-		authenticated.GET("/users/:account", handlers.HandleUsers)
-		authenticated.POST("/users", handlers.HandleUsers)
-		authenticated.DELETE("/users/:account", handlers.HandleUsers)
+		authenticated.GET("/users", handlers.GetUsers)
+		authenticated.POST("/users", handlers.CreateUser)
+		authenticated.DELETE("/users/:username", handlers.DeleteUser)
 
 		// 防火墙指标API
 		authenticated.GET("/firewall/metrics", handlers.GetFirewallMetrics)

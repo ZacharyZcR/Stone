@@ -9,12 +9,16 @@ import (
 	"github.com/shirou/gopsutil/load"
 	"github.com/shirou/gopsutil/mem"
 	"github.com/shirou/gopsutil/net"
+	"github.com/shirou/gopsutil/process"
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/mongo"
 	"go.mongodb.org/mongo-driver/mongo/options"
+	"io/ioutil"
 	"log"
 	"net/http"
-	"runtime"
+	"os"
+	"strconv"
+	"strings"
 	"time"
 )
 
@@ -58,12 +62,14 @@ func GetStatus(c *gin.Context) {
 	// 获取系统启动时间
 	uptime := time.Since(monitoring.StartTime).String()
 
-	// 获取打开文件描述符数量
-	numFDs := runtime.NumGoroutine() // 示例，实际需要更复杂的操作
+	// 获取真实的打开文件描述符数量
+	numFDs := getFileDescriptorCount()
 
-	// 获取线程和进程数量
-	numThreads := runtime.NumGoroutine()   // 示例，实际需要更复杂的操作
-	numProcesses := runtime.NumGoroutine() // 示例，实际需要更复杂的操作
+	// 获取真实的线程数量
+	numThreads := getThreadCount()
+
+	// 获取真实的进程数量
+	numProcesses := getProcessCount()
 
 	c.JSON(http.StatusOK, gin.H{
 		"status":            "running",
@@ -193,4 +199,55 @@ func GetFirewallMetrics(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, response)
+}
+
+// getFileDescriptorCount 获取当前进程的文件描述符数量
+func getFileDescriptorCount() int {
+	pid := os.Getpid()
+	fdDir := "/proc/" + strconv.Itoa(pid) + "/fd"
+	
+	files, err := ioutil.ReadDir(fdDir)
+	if err != nil {
+		log.Printf("Error reading file descriptors: %v", err)
+		return 0
+	}
+	
+	return len(files)
+}
+
+// getThreadCount 获取当前进程的线程数量
+func getThreadCount() int {
+	pid := os.Getpid()
+	statusFile := "/proc/" + strconv.Itoa(pid) + "/status"
+	
+	content, err := ioutil.ReadFile(statusFile)
+	if err != nil {
+		log.Printf("Error reading process status: %v", err)
+		return 0
+	}
+	
+	lines := strings.Split(string(content), "\n")
+	for _, line := range lines {
+		if strings.HasPrefix(line, "Threads:") {
+			parts := strings.Fields(line)
+			if len(parts) >= 2 {
+				if count, err := strconv.Atoi(parts[1]); err == nil {
+					return count
+				}
+			}
+		}
+	}
+	
+	return 0
+}
+
+// getProcessCount 获取系统进程总数
+func getProcessCount() int {
+	processes, err := process.Processes()
+	if err != nil {
+		log.Printf("Error getting process list: %v", err)
+		return 0
+	}
+	
+	return len(processes)
 }

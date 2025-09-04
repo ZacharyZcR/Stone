@@ -2,9 +2,11 @@
   <n-config-provider :theme="theme">
     <n-global-style />
     <n-message-provider>
-      <div id="app">
-        <router-view />
-      </div>
+      <n-dialog-provider>
+        <div id="app">
+          <router-view />
+        </div>
+      </n-dialog-provider>
     </n-message-provider>
   </n-config-provider>
 </template>

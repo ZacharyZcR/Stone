@@ -1,162 +1,140 @@
 package handlers
 
 import (
-	"bytes"
 	"context"
-	"crypto/rand"
 	"fmt"
 	"github.com/gin-gonic/gin"
 	"github.com/golang-jwt/jwt/v4"
-	"github.com/pquerna/otp/totp"
 	"go.mongodb.org/mongo-driver/bson"
-	"go.mongodb.org/mongo-driver/mongo"
-	"image/png"
-	"math/big"
+	"golang.org/x/crypto/bcrypt"
 	"net/http"
 	"strings"
 	"time"
 )
 
-var qrcodeEnabled = true // 默认开启
-
-// MongoDB 集合
-var totpCollection *mongo.Collection
-
-// SetTOTPCollection 设置MongoDB集合
-func SetTOTPCollection(collection *mongo.Collection) {
-	totpCollection = collection
-}
-
-// 随机生成一个16位的字符串
-func generateRandomString(length int) (string, error) {
-	const charset = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
-	result := make([]byte, length)
-	for i := range result {
-		num, err := rand.Int(rand.Reader, big.NewInt(int64(len(charset))))
-		if err != nil {
-			return "", fmt.Errorf("无法生成随机字符串: %w", err)
-		}
-		result[i] = charset[num.Int64()]
-	}
-	return string(result), nil
-}
-
-// GenerateQRCode 生成二维码并返回给客户端
-func GenerateQRCode(c *gin.Context) {
-	if !qrcodeEnabled {
-		c.JSON(http.StatusForbidden, gin.H{"error": "二维码接口已关闭"})
-		return
-	}
-
-	accountName, err := generateRandomString(16)
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "无法生成账户名称"})
-		return
-	}
-
-	key, err := totp.Generate(totp.GenerateOpts{
-		Issuer:      "StoneAdmin",
-		AccountName: accountName,
-	})
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "无法生成密钥"})
-		return
-	}
-
-	_, err = userCollection.InsertOne(context.Background(), bson.M{
-		"account":    accountName,
-		"secret":     key.Secret(),
-		"loginCount": 0,
-	})
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "无法存储密钥"})
-		return
-	}
-
-	img, err := key.Image(200, 200)
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "无法生成二维码"})
-		return
-	}
-
-	var buf bytes.Buffer
-	if err := png.Encode(&buf, img); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "无法编码二维码"})
-		return
-	}
-
-	c.Data(http.StatusOK, "image/png", buf.Bytes())
-}
-
-// ValidateTOTP 验证用户输入的TOTP代码
-func ValidateTOTP(jwtSecret string) gin.HandlerFunc {
+// Login 用户名密码登录
+func Login(jwtSecret string) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		var request struct {
-			Code    string `json:"code" binding:"required"`
-			Account string `json:"account" binding:"required"`
+			Username string `json:"username" binding:"required"`
+			Password string `json:"password" binding:"required"`
 		}
 
 		if err := c.ShouldBindJSON(&request); err != nil {
-			c.JSON(http.StatusBadRequest, gin.H{"error": "验证码和账户是必需的"})
+			c.JSON(http.StatusBadRequest, gin.H{"error": "用户名和密码是必需的"})
 			return
 		}
 
 		var user User
-		err := userCollection.FindOne(context.Background(), bson.M{"account": request.Account}).Decode(&user)
+		err := userCollection.FindOne(context.Background(), bson.M{
+			"username": request.Username,
+			"active":   true,
+		}).Decode(&user)
 		if err != nil {
-			c.JSON(http.StatusUnauthorized, gin.H{"error": "无法找到密钥"})
+			c.JSON(http.StatusUnauthorized, gin.H{"error": "用户名或密码错误"})
 			return
 		}
 
-		if totp.Validate(request.Code, user.Secret) {
-			_, err := userCollection.UpdateOne(
-				context.Background(),
-				bson.M{"account": request.Account},
-				bson.M{"$inc": bson.M{"loginCount": 1}},
-			)
-			if err != nil {
-				c.JSON(http.StatusInternalServerError, gin.H{"error": "无法更新登录次数"})
-				return
-			}
-
-			token := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.MapClaims{
-				"account": request.Account,
-				"exp":     time.Now().Add(time.Hour * 72).Unix(),
-			})
-
-			tokenString, err := token.SignedString([]byte(jwtSecret))
-			if err != nil {
-				c.JSON(http.StatusInternalServerError, gin.H{"error": "无法生成令牌"})
-				return
-			}
-
-			c.JSON(http.StatusOK, gin.H{"status": "验证码有效", "token": tokenString, "loginCount": user.LoginCount + 1})
-		} else {
-			c.JSON(http.StatusUnauthorized, gin.H{"error": "验证码无效"})
+		if err := bcrypt.CompareHashAndPassword([]byte(user.PasswordHash), []byte(request.Password)); err != nil {
+			c.JSON(http.StatusUnauthorized, gin.H{"error": "用户名或密码错误"})
+			return
 		}
+
+		// 更新最后登录时间
+		_, err = userCollection.UpdateOne(
+			context.Background(),
+			bson.M{"username": request.Username},
+			bson.M{"$set": bson.M{"last_login": time.Now()}},
+		)
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "更新登录时间失败"})
+			return
+		}
+
+		token := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.MapClaims{
+			"username": user.Username,
+			"role":     user.Role,
+			"exp":      time.Now().Add(time.Minute * 15).Unix(), // 15分钟过期
+		})
+
+		tokenString, err := token.SignedString([]byte(jwtSecret))
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "生成令牌失败"})
+			return
+		}
+
+		c.JSON(http.StatusOK, gin.H{
+			"token":    tokenString,
+			"username": user.Username,
+			"role":     user.Role,
+		})
 	}
+}
+
+// Register 用户注册
+func Register(c *gin.Context) {
+	var request struct {
+		Username string `json:"username" binding:"required,min=3,max=20"`
+		Password string `json:"password" binding:"required,min=8"`
+	}
+
+	if err := c.ShouldBindJSON(&request); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "用户名(3-20位)和密码(至少8位)是必需的"})
+		return
+	}
+
+	// 检查用户是否已存在
+	var existingUser User
+	err := userCollection.FindOne(context.Background(), bson.M{"username": request.Username}).Decode(&existingUser)
+	if err == nil {
+		c.JSON(http.StatusConflict, gin.H{"error": "用户名已存在"})
+		return
+	}
+
+	// 加密密码
+	hashedPassword, err := bcrypt.GenerateFromPassword([]byte(request.Password), bcrypt.DefaultCost)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "密码加密失败"})
+		return
+	}
+
+	// 创建新用户 - 默认为普通用户角色
+	newUser := User{
+		Username:     request.Username,
+		PasswordHash: string(hashedPassword),
+		Role:         "user", // 默认角色
+		Created:      time.Now(),
+		Active:       true,
+	}
+
+	_, err = userCollection.InsertOne(context.Background(), newUser)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "创建用户失败"})
+		return
+	}
+
+	c.JSON(http.StatusCreated, gin.H{
+		"message":  "注册成功",
+		"username": request.Username,
+	})
 }
 
 // CheckAuth 验证JWT并返回认证状态
 func CheckAuth(jwtSecret string) gin.HandlerFunc {
 	return func(c *gin.Context) {
-		// 从请求头中获取JWT
 		tokenString := c.GetHeader("Authorization")
 		if tokenString == "" {
 			c.JSON(http.StatusUnauthorized, gin.H{"authenticated": false, "error": "未提供令牌"})
 			return
 		}
 
-		// 去掉 "Bearer " 前缀
 		tokenString = strings.TrimPrefix(tokenString, "Bearer ")
 		if tokenString == "" {
 			c.JSON(http.StatusUnauthorized, gin.H{"authenticated": false, "error": "无效的令牌格式"})
 			return
 		}
 
-		// 验证JWT
 		token, err := jwt.Parse(tokenString, func(token *jwt.Token) (interface{}, error) {
-			// 确保使用的是预期的签名方法
 			if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
 				return nil, fmt.Errorf("unexpected signing method: %v", token.Header["alg"])
 			}
@@ -169,32 +147,14 @@ func CheckAuth(jwtSecret string) gin.HandlerFunc {
 		}
 
 		if claims, ok := token.Claims.(jwt.MapClaims); ok {
-			c.JSON(http.StatusOK, gin.H{"authenticated": true, "account": claims["account"]})
+			c.JSON(http.StatusOK, gin.H{
+				"authenticated": true,
+				"username":     claims["username"],
+				"role":         claims["role"],
+			})
 		} else {
 			c.JSON(http.StatusUnauthorized, gin.H{"authenticated": false, "error": "无效的令牌"})
 		}
 	}
 }
 
-// SetQRCodeStatus 设置或查询二维码接口的状态
-func SetQRCodeStatus(c *gin.Context) {
-	if c.Request.Method == http.MethodGet {
-		// 返回当前二维码接口的状态
-		c.JSON(http.StatusOK, gin.H{"enabled": qrcodeEnabled})
-		return
-	}
-
-	if c.Request.Method == http.MethodPost {
-		var request struct {
-			Enabled bool `json:"enabled"`
-		}
-
-		if err := c.ShouldBindJSON(&request); err != nil {
-			c.JSON(http.StatusBadRequest, gin.H{"error": "请求格式错误"})
-			return
-		}
-
-		qrcodeEnabled = request.Enabled
-		c.JSON(http.StatusOK, gin.H{"status": "二维码接口状态已更新", "enabled": qrcodeEnabled})
-	}
-}

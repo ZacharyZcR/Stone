@@ -148,17 +148,32 @@ export default {
           }
         });
         console.log('API Response:', response.data);
-        top10Data.value = response.data.ipStats.slice(0, 10);
+        
+        // 安全处理API响应数据
+        if (response.data && response.data.ipStats && Array.isArray(response.data.ipStats)) {
+          top10Data.value = response.data.ipStats.slice(0, 10);
+        } else {
+          console.warn('IP统计数据为空或格式不正确，使用默认数据');
+          top10Data.value = [];
+        }
 
         chartData.value = {
-          labels: top10Data.value.map(item => item._id),
+          labels: top10Data.value.map(item => item._id || '未知IP'),
           datasets: [{
-            data: top10Data.value.map(item => item.count)
+            data: top10Data.value.map(item => item.count || 0)
           }]
         };
         chartKey.value += 1; // 强制重新渲染图表
       } catch (error) {
         console.error('获取IP统计数据失败:', error);
+        // API调用失败时设置空数据
+        top10Data.value = [];
+        chartData.value = {
+          labels: [],
+          datasets: [{
+            data: []
+          }]
+        };
       }
     };
 

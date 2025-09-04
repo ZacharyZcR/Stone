@@ -59,9 +59,9 @@ func InitStorage(redisAddr, mongoURI, mongoDB, mongoCollectionName string) error
 
 // LogTraffic 保存流量日志到Redis和MongoDB
 func LogTraffic(logData map[string]interface{}) error {
-	// 确保 Redis 和 MongoDB 客户端已初始化
-	if redisClient == nil || mongoCollection == nil {
-		return fmt.Errorf("Redis或MongoDB客户端未初始化")
+	// 至少要有MongoDB客户端初始化
+	if mongoCollection == nil {
+		return fmt.Errorf("MongoDB客户端未初始化")
 	}
 
 	// 将日志数据转换为JSON字符串
@@ -70,18 +70,19 @@ func LogTraffic(logData map[string]interface{}) error {
 		return fmt.Errorf("JSON序列化失败: %v", err)
 	}
 
-	// 将日志保存到Redis
-	redisKey := fmt.Sprintf("log:%d", time.Now().UnixNano())
-	err = redisClient.Set(ctx, redisKey, logDataJSON, 0).Err()
-	if err != nil {
-		return fmt.Errorf("保存到Redis失败: %v", err)
+	// 尝试将日志保存到Redis（非阻塞）
+	if redisClient != nil {
+		redisKey := fmt.Sprintf("log:%d", time.Now().UnixNano())
+		err := redisClient.Set(ctx, redisKey, logDataJSON, time.Hour).Err()
+		if err != nil {
+			// Redis失败只记录，不阻塞业务
+			fmt.Printf("Redis保存失败(非阻塞): %v\n", err)
+		}
 	}
 
-	// 将日志保存到MongoDB
+	// 将日志保存到MongoDB（主要存储）
 	_, err = mongoCollection.InsertOne(ctx, logData)
 	if err != nil {
-		// 如果MongoDB存储失败，可以选择在Redis中标记此日志为未同步，稍后重试
-		redisClient.Set(ctx, fmt.Sprintf("%s:unsynced", redisKey), logDataJSON, 0)
 		return fmt.Errorf("保存到MongoDB失败: %v", err)
 	}
 

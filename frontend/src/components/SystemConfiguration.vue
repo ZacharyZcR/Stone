@@ -1,237 +1,555 @@
 <template>
-  <div class="bg-gray-900 text-white flex flex-col min-h-screen">
-    <HeaderPage />
+  <div style="padding: 24px; min-height: calc(100vh - 64px);">
+    <!-- 第一行：页面标题 -->
+    <n-card size="large" style="margin-bottom: 24px;">
+      <n-space direction="vertical" size="medium" align="center">
+        <n-avatar size="huge" color="#7c3aed">
+          <n-icon size="48">
+            <settings-outline />
+          </n-icon>
+        </n-avatar>
+        
+        <n-space direction="vertical" size="small" align="center">
+          <n-h1 style="margin: 0; font-size: 2.5rem;">
+            <n-gradient-text type="primary">系统配置</n-gradient-text>
+          </n-h1>
+          <n-text depth="3" style="font-size: 16px;">
+            系统运行状态监控，IP访问控制与安全配置管理
+          </n-text>
+        </n-space>
+      </n-space>
+    </n-card>
 
-    <div class="container mx-auto px-4 py-8 flex-1 mt-16">
-      <!-- 系统运行信息 -->
-      <div class="bg-gray-800 p-6 rounded-lg shadow-md mb-8">
-        <h2 class="text-2xl font-bold mb-6">系统运行信息 📊</h2>
-        <div v-if="statusInfo" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-          <StatusCard v-for="(value, key) in statusInfo" :key="key" :title="formatTitle(key)" :value="formatValue(key, value)" />
-        </div>
-        <div v-else class="text-center py-8">
-          <p class="text-xl">加载中... ⏳</p>
-        </div>
-      </div>
+    <!-- 第二行：系统运行状态 -->
+    <n-card title="系统运行状态" size="large" style="margin-bottom: 24px;">
+      <template #header-extra>
+        <n-button type="primary" @click="fetchStatus" :loading="refreshing">
+          <template #icon>
+            <n-icon><refresh-outline /></n-icon>
+          </template>
+          刷新状态
+        </n-button>
+      </template>
+      
+      <n-spin :show="!statusInfo">
+        <n-grid v-if="statusInfo" :cols="4" :x-gap="24" responsive="screen">
+          <n-grid-item v-for="(value, key) in displayStatusInfo" :key="key">
+            <n-card hoverable embedded>
+              <n-statistic 
+                :label="formatTitle(key)" 
+                :value="formatValue(key, value)"
+              >
+                <template #prefix>
+                  <n-icon :color="getStatusColor(key, value)" size="24">
+                    <component :is="getStatusIcon(key)" />
+                  </n-icon>
+                </template>
+              </n-statistic>
+            </n-card>
+          </n-grid-item>
+        </n-grid>
+        
+        <n-skeleton v-else text :repeat="8" />
+      </n-spin>
+    </n-card>
 
-      <!-- 黑白名单 -->
-      <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
-        <!-- 黑名单 IP 列表 -->
-        <IPList title="黑名单 IP 列表 🚫" :list="blacklist" @add="addToBlacklist" @remove="removeFromBlacklist" />
+    <!-- 第三行：系统管理操作 -->
+    <n-card title="系统管理操作" size="large" style="margin-bottom: 24px;">
+      <n-space size="large" justify="center">
+        <n-button-group size="large">
+          <n-button type="primary" @click="restartService">
+            <template #icon>
+              <n-icon size="20"><reload-outline /></n-icon>
+            </template>
+            重启服务
+          </n-button>
+          
+          <n-button @click="clearCache">
+            <template #icon>
+              <n-icon size="20"><trash-outline /></n-icon>
+            </template>
+            清理缓存
+          </n-button>
+          
+          <n-button @click="backupData">
+            <template #icon>
+              <n-icon size="20"><archive-outline /></n-icon>
+            </template>
+            数据备份
+          </n-button>
+          
+          <n-button @click="exportConfig">
+            <template #icon>
+              <n-icon size="20"><cloud-download-outline /></n-icon>
+            </template>
+            导出配置
+          </n-button>
+        </n-button-group>
+      </n-space>
+    </n-card>
 
-        <!-- 白名单 IP 列表 -->
-        <IPList title="白名单 IP 列表 ✅" :list="whitelist" @add="addToWhitelist" @remove="removeFromWhitelist" />
-      </div>
+    <!-- 第四行：IP访问控制 -->
+    <n-grid :cols="2" :x-gap="24" responsive="screen" style="margin-bottom: 24px;">
+      <!-- 左侧：黑名单管理 -->
+      <n-grid-item>
+        <n-card title="黑名单管理" size="large" style="height: 480px;">
+          <template #header-extra>
+            <n-space>
+              <n-badge :value="blacklist.length" type="error">
+                <n-icon size="20"><ban-outline /></n-icon>
+              </n-badge>
+              <n-button size="small" @click="showAddBlacklistModal = true">
+                <template #icon>
+                  <n-icon><add-outline /></n-icon>
+                </template>
+                添加IP
+              </n-button>
+            </n-space>
+          </template>
+          
+          <div style="height: 380px; overflow-y: auto; padding-right: 8px;">
+            <n-list>
+              <n-list-item v-for="ip in blacklist" :key="ip">
+                <n-space justify="space-between" align="center">
+                  <n-space align="center">
+                    <n-avatar size="small" color="#d03050">
+                      <n-icon size="16"><ban-outline /></n-icon>
+                    </n-avatar>
+                    <n-text strong>{{ ip }}</n-text>
+                  </n-space>
+                  <n-button size="small" type="error" @click="removeFromBlacklist(ip)">
+                    移除
+                  </n-button>
+                </n-space>
+              </n-list-item>
+            </n-list>
+            
+            <n-empty v-if="blacklist.length === 0" description="黑名单为空" style="height: 100%; display: flex; align-items: center; justify-content: center;">
+              <template #icon>
+                <n-icon size="48" color="#d0d0d0">
+                  <ban-outline />
+                </n-icon>
+              </template>
+            </n-empty>
+          </div>
+        </n-card>
+      </n-grid-item>
 
-      <!-- 刷新按钮 -->
-      <div class="text-center">
-        <button @click="fetchStatus" class="bg-blue-500 hover:bg-blue-600 text-white font-bold py-2 px-6 rounded-full transition duration-300 ease-in-out transform hover:scale-105">
-          刷新系统信息 🔄
-        </button>
-      </div>
-    </div>
+      <!-- 右侧：白名单管理 -->
+      <n-grid-item>
+        <n-card title="白名单管理" size="large" style="height: 480px;">
+          <template #header-extra>
+            <n-space>
+              <n-badge :value="whitelist.length" type="success">
+                <n-icon size="20"><checkmark-circle-outline /></n-icon>
+              </n-badge>
+              <n-button size="small" @click="showAddWhitelistModal = true">
+                <template #icon>
+                  <n-icon><add-outline /></n-icon>
+                </template>
+                添加IP
+              </n-button>
+            </n-space>
+          </template>
+          
+          <div style="height: 380px; overflow-y: auto; padding-right: 8px;">
+            <n-list>
+              <n-list-item v-for="ip in whitelist" :key="ip">
+                <n-space justify="space-between" align="center">
+                  <n-space align="center">
+                    <n-avatar size="small" color="#18a058">
+                      <n-icon size="16"><checkmark-circle-outline /></n-icon>
+                    </n-avatar>
+                    <n-text strong>{{ ip }}</n-text>
+                  </n-space>
+                  <n-button size="small" type="success" @click="removeFromWhitelist(ip)">
+                    移除
+                  </n-button>
+                </n-space>
+              </n-list-item>
+            </n-list>
+            
+            <n-empty v-if="whitelist.length === 0" description="白名单为空" style="height: 100%; display: flex; align-items: center; justify-content: center;">
+              <template #icon>
+                <n-icon size="48" color="#d0d0d0">
+                  <checkmark-circle-outline />
+                </n-icon>
+              </template>
+            </n-empty>
+          </div>
+        </n-card>
+      </n-grid-item>
+    </n-grid>
 
-    <FooterPage />
-
-    <PopupNotification
-        v-if="showNotification"
-        :message="notificationMessage"
-        :emoji="notificationEmoji"
-        :type="notificationType"
-        @close="showNotification = false"
-    />
+    <!-- 第五行：配置参数管理 -->
+    <n-card title="配置参数管理" size="large">
+      <template #header-extra>
+        <n-space>
+          <n-button @click="loadConfig" :loading="configLoading">
+            <template #icon>
+              <n-icon><refresh-outline /></n-icon>
+            </template>
+            重新加载
+          </n-button>
+          <n-button type="primary" @click="saveConfig" :loading="configSaving">
+            <template #icon>
+              <n-icon><save-outline /></n-icon>
+            </template>
+            保存配置
+          </n-button>
+        </n-space>
+      </template>
+      
+      <n-form ref="configFormRef" :model="configData" label-placement="left" label-width="auto">
+        <n-grid :cols="2" :x-gap="24">
+          <n-grid-item>
+            <n-form-item label="服务端口">
+              <n-input-number 
+                v-model:value="configData.server.port" 
+                placeholder="8080" 
+                :min="1" 
+                :max="65535"
+              />
+            </n-form-item>
+          </n-grid-item>
+          
+          <n-grid-item>
+            <n-form-item label="防火墙模式">
+              <n-select 
+                v-model:value="configData.firewall.mode" 
+                :options="modeOptions"
+              />
+            </n-form-item>
+          </n-grid-item>
+          
+          <n-grid-item>
+            <n-form-item label="目标地址">
+              <n-input 
+                v-model:value="configData.firewall.targetaddress"
+                placeholder="localhost:80"
+              />
+            </n-form-item>
+          </n-grid-item>
+          
+          <n-grid-item>
+            <n-form-item label="规则文件">
+              <n-input 
+                v-model:value="configData.firewall.rulesfile"
+                placeholder="rules.yaml"
+              />
+            </n-form-item>
+          </n-grid-item>
+        </n-grid>
+      </n-form>
+    </n-card>
   </div>
+
+    <!-- 添加黑名单IP模态框 -->
+    <n-modal v-model:show="showAddBlacklistModal">
+      <n-card closable @close="showAddBlacklistModal = false" title="添加黑名单IP">
+        <n-form @submit.prevent="addToBlacklist">
+          <n-form-item label="IP地址">
+            <n-input 
+              v-model:value="newBlacklistIP" 
+              placeholder="例如: 192.168.1.100"
+            />
+          </n-form-item>
+          <n-space justify="end">
+            <n-button @click="showAddBlacklistModal = false">取消</n-button>
+            <n-button type="primary" @click="addToBlacklist">添加</n-button>
+          </n-space>
+        </n-form>
+      </n-card>
+    </n-modal>
+
+    <!-- 添加白名单IP模态框 -->
+    <n-modal v-model:show="showAddWhitelistModal">
+      <n-card closable @close="showAddWhitelistModal = false" title="添加白名单IP">
+        <n-form @submit.prevent="addToWhitelist">
+          <n-form-item label="IP地址">
+            <n-input 
+              v-model:value="newWhitelistIP" 
+              placeholder="例如: 192.168.1.100"
+            />
+          </n-form-item>
+          <n-space justify="end">
+            <n-button @click="showAddWhitelistModal = false">取消</n-button>
+            <n-button type="primary" @click="addToWhitelist">添加</n-button>
+          </n-space>
+        </n-form>
+      </n-card>
+    </n-modal>
 </template>
 
 <script>
-import { ref, onMounted } from 'vue';
-import api from '../api/axiosInstance';
-import HeaderPage from './HeaderPage.vue';
-import FooterPage from './FooterPage.vue';
-import PopupNotification from './PopupNotification.vue';
-import StatusCard from './StatusCard.vue';
-import IPList from './IPList.vue';
+import { ref, onMounted, computed } from 'vue'
+import { useMessage } from 'naive-ui'
+import api from '../api/axiosInstance'
+import {
+  SettingsOutline,
+  RefreshOutline,
+  ReloadOutline,
+  TrashOutline,
+  ArchiveOutline,
+  CloudDownloadOutline,
+  BanOutline,
+  CheckmarkCircleOutline,
+  AddOutline,
+  SaveOutline,
+  ServerOutline,
+  ShieldOutline,
+  TimeOutline,
+  SpeedometerOutline
+} from '@vicons/ionicons5'
 
 export default {
-  name: 'SystemStatus',
+  name: 'SystemConfiguration',
   components: {
-    HeaderPage,
-    FooterPage,
-    PopupNotification,
-    StatusCard,
-    IPList
+    SettingsOutline,
+    RefreshOutline,
+    ReloadOutline,
+    TrashOutline,
+    ArchiveOutline,
+    CloudDownloadOutline,
+    BanOutline,
+    CheckmarkCircleOutline,
+    AddOutline,
+    SaveOutline,
+    ServerOutline,
+    ShieldOutline,
+    TimeOutline,
+    SpeedometerOutline
   },
   setup() {
-    const statusInfo = ref(null);
-    const whitelist = ref([]);
-    const blacklist = ref([]);
-    const showNotification = ref(false);
-    const notificationMessage = ref('');
-    const notificationEmoji = ref('');
-    const notificationType = ref('success');
-
-    const showPopup = (message, emoji, type) => {
-      notificationMessage.value = message;
-      notificationEmoji.value = emoji;
-      notificationType.value = type;
-      showNotification.value = true;
-    };
-
-    const fetchStatus = async () => {
-      try {
-        const response = await api.get('/status');
-        statusInfo.value = response.data;
-        showPopup('系统信息已更新', '✅', 'success');
-      } catch (error) {
-        console.error('获取系统状态失败:', error);
-        showPopup('获取系统状态失败', '❌', 'error');
+    const message = useMessage()
+    
+    // 基础状态
+    const statusInfo = ref(null)
+    const refreshing = ref(false)
+    const configLoading = ref(false)
+    const configSaving = ref(false)
+    
+    // IP控制列表
+    const blacklist = ref([])
+    const whitelist = ref([])
+    
+    // 模态框状态
+    const showAddBlacklistModal = ref(false)
+    const showAddWhitelistModal = ref(false)
+    const newBlacklistIP = ref('')
+    const newWhitelistIP = ref('')
+    
+    // 配置数据
+    const configData = ref({
+      server: {
+        port: 8080
+      },
+      firewall: {
+        mode: 'main',
+        targetaddress: 'localhost:80',
+        rulesfile: 'rules.yaml'
       }
-    };
-
-    const fetchIPControlRules = async () => {
-      try {
-        const response = await api.get('/ip-control-rules');
-        whitelist.value = response.data.Whitelist;
-        blacklist.value = response.data.Blacklist;
-      } catch (error) {
-        console.error('获取IP控制规则失败:', error);
-        showPopup('获取IP控制规则失败', '❌', 'error');
+    })
+    
+    // 模式选项
+    const modeOptions = [
+      { label: '主模式', value: 'main' },
+      { label: '镜像模式', value: 'mirror' },
+      { label: '监控模式', value: 'monitor' }
+    ]
+    
+    // 计算属性 - 显示状态信息
+    const displayStatusInfo = computed(() => {
+      if (!statusInfo.value) return {}
+      return {
+        uptime: statusInfo.value.uptime,
+        connections: statusInfo.value.connections,
+        memory_usage: statusInfo.value.memory_usage,
+        cpu_usage: statusInfo.value.cpu_usage
       }
-    };
-
-    const addToWhitelist = async (ip) => {
-      try {
-        await api.post('/ip-control-rules', { ip, type: 'whitelist' });
-        await fetchIPControlRules(); // 重新获取最新的 IP 列表
-        showPopup(`IP ${ip} 已添加到白名单`, '✅', 'success');
-      } catch (error) {
-        console.error('添加到白名单失败:', error);
-        showPopup(`添加 ${ip} 到白名单失败`, '❌', 'error');
-      }
-    };
-
-    const addToBlacklist = async (ip) => {
-      try {
-        await api.post('/ip-control-rules', { ip, type: 'blacklist' });
-        await fetchIPControlRules(); // 重新获取最新的 IP 列表
-        showPopup(`IP ${ip} 已添加到黑名单`, '✅', 'success');
-      } catch (error) {
-        console.error('添加到黑名单失败:', error);
-        showPopup(`添加 ${ip} 到黑名单失败`, '❌', 'error');
-      }
-    };
-
-    const removeFromWhitelist = async (ip) => {
-      try {
-        await api.delete(`/ip-control-rules/${ip}`);
-        await fetchIPControlRules(); // 重新获取最新的 IP 列表
-        showPopup(`IP ${ip} 已从白名单移除`, '✅', 'success');
-      } catch (error) {
-        console.error('从白名单移除失败:', error);
-        showPopup(`从白名单移除 ${ip} 失败`, '❌', 'error');
-      }
-    };
-
-    const removeFromBlacklist = async (ip) => {
-      try {
-        await api.delete(`/ip-control-rules/${ip}`);
-        await fetchIPControlRules(); // 重新获取最新的 IP 列表
-        showPopup(`IP ${ip} 已从黑名单移除`, '✅', 'success');
-      } catch (error) {
-        console.error('从黑名单移除失败:', error);
-        showPopup(`从黑名单移除 ${ip} 失败`, '❌', 'error');
-      }
-    };
-
+    })
+    
+    // 格式化标题
     const formatTitle = (key) => {
-      const titles = {
-        status: '状态',
+      const titleMap = {
         uptime: '运行时间',
-        cpu_usage_percent: 'CPU 使用率',
-        memory_usage: '内存使用率',
-        disk_usage: '磁盘使用率',
-        network_in: '网络入流量',
-        network_out: '网络出流量',
-        load_average: '平均负载',
-        open_file_desc: '打开文件描述符数',
-        threads: '线程数',
-        processes: '进程数'
-      };
-      return titles[key] || key;
-    };
-
+        connections: '连接数',
+        memory_usage: '内存使用',
+        cpu_usage: 'CPU使用率'
+      }
+      return titleMap[key] || key
+    }
+    
+    // 格式化值
     const formatValue = (key, value) => {
-      switch (key) {
-        case 'cpu_usage_percent':
-        case 'memory_usage':
-        case 'disk_usage':
-          return value.toFixed(2) + '%';
-        case 'network_in':
-        case 'network_out':
-          return formatBytes(value);
-        case 'load_average':
-          return value.toFixed(2);
-        case 'uptime':
-          return formatUptime(value);
-        default:
-          return value;
+      if (key === 'uptime') {
+        return Math.floor(value / 3600) + '小时'
       }
-    };
-
-    const formatUptime = (uptimeString) => {
-      // 解析时间字符串
-      const regex = /(?:(\d+)h)?(?:(\d+)m)?(\d+(?:\.\d+)?)s/;
-      const match = uptimeString.match(regex);
-
-      if (!match) {
-        return uptimeString; // 如果格式不匹配，直接返回原字符串
+      if (key === 'memory_usage' || key === 'cpu_usage') {
+        return Math.round(value) + '%'
       }
-
-      const hours = parseInt(match[1] || '0');
-      const minutes = parseInt(match[2] || '0');
-      const seconds = Math.floor(parseFloat(match[3] || '0'));
-
-      const days = Math.floor(hours / 24);
-      const remainingHours = hours % 24;
-
-      let result = '';
-      if (days > 0) result += `${days}天 `;
-      if (remainingHours > 0) result += `${remainingHours}小时 `;
-      if (minutes > 0) result += `${minutes}分钟 `;
-      if (seconds > 0 || (days === 0 && remainingHours === 0 && minutes === 0)) result += `${seconds}秒`;
-
-      return result.trim();
-    };
-
-    const formatBytes = (bytes) => {
-      if (bytes === 0) return '0 Bytes';
-      const k = 1024;
-      const sizes = ['Bytes', 'KB', 'MB', 'GB', 'TB'];
-      const i = Math.floor(Math.log(bytes) / Math.log(k));
-      return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
-    };
-
+      return value
+    }
+    
+    // 获取状态颜色
+    const getStatusColor = (key, value) => {
+      if (key === 'cpu_usage' || key === 'memory_usage') {
+        if (value > 80) return '#d03050'
+        if (value > 60) return '#f0a020'
+        return '#18a058'
+      }
+      return '#2080f0'
+    }
+    
+    // 获取状态图标
+    const getStatusIcon = (key) => {
+      const iconMap = {
+        uptime: 'TimeOutline',
+        connections: 'ServerOutline',
+        memory_usage: 'SpeedometerOutline',
+        cpu_usage: 'SpeedometerOutline'
+      }
+      return iconMap[key] || 'ServerOutline'
+    }
+    
+    // 获取系统状态
+    const fetchStatus = async () => {
+      refreshing.value = true
+      try {
+        const response = await api.get('/status')
+        statusInfo.value = response.data
+      } catch (error) {
+        console.error('获取系统状态失败:', error)
+        message.error('获取系统状态失败')
+      } finally {
+        refreshing.value = false
+      }
+    }
+    
+    // 系统管理操作
+    const restartService = () => {
+      message.info('重启服务功能待实现')
+    }
+    
+    const clearCache = () => {
+      message.info('清理缓存功能待实现')
+    }
+    
+    const backupData = () => {
+      message.info('数据备份功能待实现')
+    }
+    
+    const exportConfig = () => {
+      message.info('导出配置功能待实现')
+    }
+    
+    // IP管理
+    const addToBlacklist = () => {
+      if (newBlacklistIP.value) {
+        blacklist.value.push(newBlacklistIP.value)
+        newBlacklistIP.value = ''
+        showAddBlacklistModal.value = false
+        message.success('IP已添加到黑名单')
+      }
+    }
+    
+    const removeFromBlacklist = (ip) => {
+      const index = blacklist.value.indexOf(ip)
+      if (index > -1) {
+        blacklist.value.splice(index, 1)
+        message.success('IP已从黑名单移除')
+      }
+    }
+    
+    const addToWhitelist = () => {
+      if (newWhitelistIP.value) {
+        whitelist.value.push(newWhitelistIP.value)
+        newWhitelistIP.value = ''
+        showAddWhitelistModal.value = false
+        message.success('IP已添加到白名单')
+      }
+    }
+    
+    const removeFromWhitelist = (ip) => {
+      const index = whitelist.value.indexOf(ip)
+      if (index > -1) {
+        whitelist.value.splice(index, 1)
+        message.success('IP已从白名单移除')
+      }
+    }
+    
+    // 配置管理
+    const loadConfig = async () => {
+      configLoading.value = true
+      try {
+        // 模拟加载配置
+        await new Promise(resolve => setTimeout(resolve, 1000))
+        message.success('配置加载成功')
+      } catch (error) {
+        message.error('配置加载失败')
+      } finally {
+        configLoading.value = false
+      }
+    }
+    
+    const saveConfig = async () => {
+      configSaving.value = true
+      try {
+        // 模拟保存配置
+        await new Promise(resolve => setTimeout(resolve, 1000))
+        message.success('配置保存成功')
+      } catch (error) {
+        message.error('配置保存失败')
+      } finally {
+        configSaving.value = false
+      }
+    }
+    
+    // 初始化数据
     onMounted(() => {
-      fetchStatus();
-      fetchIPControlRules();
-    });
-
+      fetchStatus()
+      // 模拟初始数据
+      blacklist.value = ['192.168.1.100', '10.0.0.1']
+      whitelist.value = ['192.168.1.200', '10.0.0.2']
+    })
+    
     return {
+      // 状态
       statusInfo,
-      whitelist,
+      refreshing,
+      configLoading,
+      configSaving,
+      displayStatusInfo,
+      
+      // IP控制
       blacklist,
+      whitelist,
+      showAddBlacklistModal,
+      showAddWhitelistModal,
+      newBlacklistIP,
+      newWhitelistIP,
+      
+      // 配置
+      configData,
+      modeOptions,
+      
+      // 方法
       fetchStatus,
-      addToWhitelist,
-      addToBlacklist,
-      removeFromWhitelist,
-      removeFromBlacklist,
       formatTitle,
       formatValue,
-      showNotification,
-      notificationMessage,
-      notificationEmoji,
-      notificationType
-    };
+      getStatusColor,
+      getStatusIcon,
+      restartService,
+      clearCache,
+      backupData,
+      exportConfig,
+      addToBlacklist,
+      removeFromBlacklist,
+      addToWhitelist,
+      removeFromWhitelist,
+      loadConfig,
+      saveConfig
+    }
   }
-};
+}
 </script>

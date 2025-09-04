@@ -35,10 +35,7 @@ func main() {
 			"rulesfile":     "pkg/rules/rules.yaml",
 			"targetaddress": "localhost:80",
 		},
-		"secrets": bson.M{
-			"sessionSecret": "YourSessionSecretHere",
-			"jwtSecret":     "YourJWTSecretHere",
-		},
+		// secrets moved to environment variables
 	}
 
 	_, err = configCollection.InsertOne(context.Background(), configDoc)

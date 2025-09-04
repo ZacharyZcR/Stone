@@ -1,0 +1,812 @@
+<template>
+  <div style="padding: 24px; min-height: calc(100vh - 64px);">
+    <!-- 第一行：日志分析标题 -->
+    <n-card size="large" style="margin-bottom: 24px;">
+      <n-space direction="vertical" size="medium" align="center">
+        <n-avatar size="huge" color="#f0a020">
+          <n-icon size="48">
+            <document-text-outline />
+          </n-icon>
+        </n-avatar>
+        
+        <n-space direction="vertical" size="small" align="center">
+          <n-h1 style="margin: 0; font-size: 2.5rem;">
+            <n-gradient-text type="warning">日志分析</n-gradient-text>
+          </n-h1>
+          <n-text depth="3" style="font-size: 16px;">
+            实时监控访问日志，深度分析安全威胁和攻击模式
+          </n-text>
+        </n-space>
+      </n-space>
+    </n-card>
+
+    <!-- 第二行：日志统计概览 -->
+    <n-card title="实时日志统计" size="large" style="margin-bottom: 24px;">
+      <template #header-extra>
+        <n-button type="primary" @click="fetchLogs" :loading="refreshing">
+          <template #icon>
+            <n-icon><refresh-outline /></n-icon>
+          </template>
+          刷新数据
+        </n-button>
+      </template>
+      
+      <n-grid :cols="5" :x-gap="24" responsive="screen">
+        <n-grid-item>
+          <n-card hoverable embedded>
+            <n-statistic label="今日日志" :value="todayLogs" suffix="条">
+              <template #prefix>
+                <n-icon color="#18a058" size="24">
+                  <document-outline />
+                </n-icon>
+              </template>
+            </n-statistic>
+          </n-card>
+        </n-grid-item>
+        
+        <n-grid-item>
+          <n-card hoverable embedded>
+            <n-statistic label="拦截日志" :value="blockedLogs" suffix="条">
+              <template #prefix>
+                <n-icon color="#d03050" size="24">
+                  <ban-outline />
+                </n-icon>
+              </template>
+            </n-statistic>
+          </n-card>
+        </n-grid-item>
+        
+        <n-grid-item>
+          <n-card hoverable embedded>
+            <n-statistic label="正常访问" :value="normalLogs" suffix="条">
+              <template #prefix>
+                <n-icon color="#2080f0" size="24">
+                  <checkmark-circle-outline />
+                </n-icon>
+              </template>
+            </n-statistic>
+          </n-card>
+        </n-grid-item>
+
+        <n-grid-item>
+          <n-card hoverable embedded>
+            <n-statistic label="异常IP" :value="suspiciousIps" suffix="个">
+              <template #prefix>
+                <n-icon color="#f0a020" size="24">
+                  <warning-outline />
+                </n-icon>
+              </template>
+            </n-statistic>
+          </n-card>
+        </n-grid-item>
+
+        <n-grid-item>
+          <n-card hoverable embedded>
+            <n-statistic label="平均响应" :value="avgResponseTime" suffix="ms">
+              <template #prefix>
+                <n-icon color="#7c3aed" size="24">
+                  <time-outline />
+                </n-icon>
+              </template>
+            </n-statistic>
+          </n-card>
+        </n-grid-item>
+      </n-grid>
+    </n-card>
+
+    <!-- 第三行：快速筛选和搜索 -->
+    <n-card title="日志筛选" size="large" style="margin-bottom: 24px;">
+      <n-space size="large" align="end">
+        <n-form-item label="时间范围">
+          <n-date-picker 
+            v-model:value="dateRange"
+            type="datetimerange"
+            size="large"
+            @update:value="handleDateRangeChange"
+          />
+        </n-form-item>
+        
+        <n-form-item label="日志级别">
+          <n-select
+            v-model:value="logLevel"
+            placeholder="选择级别"
+            size="large"
+            style="width: 140px;"
+            @update:value="handleFilter"
+          >
+            <n-option value="" label="全部级别" />
+            <n-option value="info" label="信息" />
+            <n-option value="warning" label="警告" />
+            <n-option value="error" label="错误" />
+            <n-option value="blocked" label="拦截" />
+          </n-select>
+        </n-form-item>
+        
+        <n-form-item label="状态筛选">
+          <n-select
+            v-model:value="statusFilter"
+            placeholder="请求状态"
+            size="large"
+            style="width: 120px;"
+            @update:value="handleFilter"
+          >
+            <n-option value="" label="全部" />
+            <n-option value="200" label="200 OK" />
+            <n-option value="403" label="403 拒绝" />
+            <n-option value="404" label="404 未找到" />
+            <n-option value="500" label="500 错误" />
+          </n-select>
+        </n-form-item>
+        
+        <n-input
+          v-model:value="searchQuery"
+          placeholder="搜索IP、URL或用户代理"
+          size="large"
+          style="width: 300px;"
+          clearable
+          @input="handleSearch"
+        >
+          <template #prefix>
+            <n-icon><search-outline /></n-icon>
+          </template>
+        </n-input>
+        
+        <n-button-group size="large">
+          <n-button type="primary" @click="applyFilters">
+            <template #icon>
+              <n-icon><funnel-outline /></n-icon>
+            </template>
+            应用筛选
+          </n-button>
+          
+          <n-button @click="clearFilters">
+            <template #icon>
+              <n-icon><refresh-outline /></n-icon>
+            </template>
+            清除筛选
+          </n-button>
+        </n-button-group>
+      </n-space>
+    </n-card>
+
+    <!-- 第四行：日志数据表格 -->
+    <n-card title="访问日志详情" size="large" style="margin-bottom: 24px;">
+      <template #header-extra>
+        <n-space>
+          <n-tag type="info" size="medium">
+            共 {{ totalCount }} 条记录
+          </n-tag>
+          <n-button @click="exportLogs">
+            <template #icon>
+              <n-icon><cloud-download-outline /></n-icon>
+            </template>
+            导出日志
+          </n-button>
+        </n-space>
+      </template>
+      
+      <!-- 日志表格 -->
+      <n-data-table
+        :columns="columns"
+        :data="displayLogs"
+        :loading="loading"
+        :pagination="{
+          page: currentPage,
+          pageSize: pageSize,
+          itemCount: totalCount,
+          showSizePicker: true,
+          pageSizes: [20, 50, 100],
+          onUpdatePage: changePage,
+          onUpdatePageSize: changePageSize
+        }"
+        :row-key="row => row.id"
+        size="large"
+        :scroll-x="1400"
+      >
+        <template #empty>
+          <n-empty description="暂无日志数据">
+            <template #icon>
+              <n-icon size="48" color="#d0d0d0">
+                <document-text-outline />
+              </n-icon>
+            </template>
+          </n-empty>
+        </template>
+      </n-data-table>
+    </n-card>
+
+    <!-- 第五行：日志统计图表 -->
+    <n-card title="访问趋势分析" size="large">
+      <template #header-extra>
+        <n-space>
+          <n-tag type="success" size="medium">实时更新</n-tag>
+          <n-button size="small" quaternary>
+            <template #icon>
+              <n-icon><analytics-outline /></n-icon>
+            </template>
+            详细分析
+          </n-button>
+        </n-space>
+      </template>
+      
+      <div style="height: 400px;">
+        <StatisticsChart v-if="logs.length" />
+        <n-empty v-else description="暂无统计数据" style="height: 100%; display: flex; align-items: center; justify-content: center;">
+          <template #icon>
+            <n-icon size="48" color="#d0d0d0">
+              <bar-chart-outline />
+            </n-icon>
+          </template>
+        </n-empty>
+      </div>
+    </n-card>
+
+    <!-- 日志详情模态框 -->
+    <n-modal 
+      v-model:show="showDetailModal" 
+      preset="card" 
+      title="日志详情" 
+      size="large" 
+      style="width: 1000px;"
+    >
+      <template v-if="selectedLog">
+        <n-descriptions :column="2" bordered size="large">
+          <n-descriptions-item label="时间戳">
+            {{ formatTimestamp(selectedLog.timestamp) }}
+          </n-descriptions-item>
+          <n-descriptions-item label="IP地址">
+            <n-tag type="info">{{ selectedLog.ip }}</n-tag>
+          </n-descriptions-item>
+          <n-descriptions-item label="请求方法">
+            <n-tag :type="getMethodType(selectedLog.method)">
+              {{ selectedLog.method }}
+            </n-tag>
+          </n-descriptions-item>
+          <n-descriptions-item label="状态码">
+            <n-tag :type="getStatusType(selectedLog.status)">
+              {{ selectedLog.status }}
+            </n-tag>
+          </n-descriptions-item>
+          <n-descriptions-item label="请求URL" span="2">
+            <n-text code>{{ selectedLog.url }}</n-text>
+          </n-descriptions-item>
+          <n-descriptions-item label="用户代理" span="2">
+            <n-text>{{ selectedLog.user_agent }}</n-text>
+          </n-descriptions-item>
+          <n-descriptions-item label="响应大小">
+            {{ formatBytes(selectedLog.response_size) }}
+          </n-descriptions-item>
+          <n-descriptions-item label="响应时间">
+            {{ selectedLog.response_time }}ms
+          </n-descriptions-item>
+          <n-descriptions-item label="威胁等级">
+            <n-tag :type="getThreatType(selectedLog.threat_level)">
+              {{ selectedLog.threat_level || '正常' }}
+            </n-tag>
+          </n-descriptions-item>
+          <n-descriptions-item label="触发规则">
+            {{ selectedLog.triggered_rule || '无' }}
+          </n-descriptions-item>
+        </n-descriptions>
+        
+        <n-divider>请求详情</n-divider>
+        
+        <n-tabs>
+          <n-tab-pane name="headers" tab="请求头">
+            <n-code :code="JSON.stringify(selectedLog.headers || {}, null, 2)" language="json" />
+          </n-tab-pane>
+          <n-tab-pane name="payload" tab="请求体">
+            <n-code :code="selectedLog.request_body || '无请求体'" language="text" />
+          </n-tab-pane>
+          <n-tab-pane name="response" tab="响应">
+            <n-code :code="selectedLog.response_body || '无响应体'" language="text" />
+          </n-tab-pane>
+        </n-tabs>
+      </template>
+      
+      <template #footer>
+        <n-space justify="end">
+          <n-button @click="showDetailModal = false">关闭</n-button>
+          <n-button type="primary" @click="addToBlacklist(selectedLog.ip)">
+            加入黑名单
+          </n-button>
+        </n-space>
+      </template>
+    </n-modal>
+  </div>
+</template>
+
+<script>
+import { ref, computed, h, onMounted } from 'vue';
+import { useMessage } from 'naive-ui';
+import api from '../api/axiosInstance';
+import StatisticsChart from './StatisticsChart.vue';
+import {
+  DocumentTextOutline,
+  RefreshOutline,
+  DocumentOutline,
+  BanOutline,
+  CheckmarkCircleOutline,
+  WarningOutline,
+  TimeOutline,
+  SearchOutline,
+  FunnelOutline,
+  CloudDownloadOutline,
+  AnalyticsOutline,
+  BarChartOutline,
+  EyeOutline,
+  CopyOutline,
+  ShieldOutline
+} from '@vicons/ionicons5';
+
+export default {
+  name: 'LogAnalysis',
+  components: {
+    StatisticsChart,
+    DocumentTextOutline,
+    RefreshOutline,
+    DocumentOutline,
+    BanOutline,
+    CheckmarkCircleOutline,
+    WarningOutline,
+    TimeOutline,
+    SearchOutline,
+    FunnelOutline,
+    CloudDownloadOutline,
+    AnalyticsOutline,
+    BarChartOutline,
+    EyeOutline,
+    CopyOutline,
+    ShieldOutline
+  },
+  setup() {
+    const message = useMessage();
+    const logs = ref([]);
+    const selectedLog = ref(null);
+    const currentPage = ref(1);
+    const pageSize = ref(20);
+    const totalCount = ref(2840);
+    const loading = ref(false);
+    const refreshing = ref(false);
+    const showDetailModal = ref(false);
+    
+    // 筛选条件
+    const dateRange = ref(null);
+    const logLevel = ref('');
+    const statusFilter = ref('');
+    const searchQuery = ref('');
+    const filters = ref({});
+    
+    // 统计数据
+    const todayLogs = ref(2840);
+    const blockedLogs = ref(156);
+    const normalLogs = ref(2684);
+    const suspiciousIps = ref(23);
+    const avgResponseTime = ref(245);
+
+    // 模拟日志数据
+    const mockLogs = [
+      {
+        id: 1,
+        timestamp: '2024-01-15T14:30:25.123Z',
+        ip: '192.168.1.100',
+        method: 'POST',
+        url: '/login',
+        status: 200,
+        user_agent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+        response_size: 1024,
+        response_time: 245,
+        threat_level: null,
+        triggered_rule: null,
+        headers: {
+          'Accept': 'application/json',
+          'Content-Type': 'application/json'
+        },
+        request_body: '{"username":"admin","password":"***"}',
+        response_body: '{"status":"success","token":"***"}'
+      },
+      {
+        id: 2,
+        timestamp: '2024-01-15T14:29:18.456Z',
+        ip: '10.0.0.25',
+        method: 'GET',
+        url: '/admin/users?id=1 union select * from passwords',
+        status: 403,
+        user_agent: 'sqlmap/1.6.12',
+        response_size: 512,
+        response_time: 12,
+        threat_level: 'high',
+        triggered_rule: 'SQL_INJECTION_BASIC',
+        headers: {
+          'Accept': '*/*',
+          'User-Agent': 'sqlmap/1.6.12'
+        },
+        request_body: null,
+        response_body: 'Access Denied'
+      },
+      {
+        id: 3,
+        timestamp: '2024-01-15T14:28:45.789Z',
+        ip: '172.16.1.50',
+        method: 'GET',
+        url: '/search?q=<script>alert(xss)</script>',
+        status: 403,
+        user_agent: 'Mozilla/5.0 (compatible; Baiduspider/2.0)',
+        response_size: 256,
+        response_time: 8,
+        threat_level: 'medium',
+        triggered_rule: 'XSS_SCRIPT_BLOCK',
+        headers: {
+          'Accept': 'text/html,application/xhtml+xml',
+          'User-Agent': 'Mozilla/5.0 (compatible; Baiduspider/2.0)'
+        },
+        request_body: null,
+        response_body: 'Blocked by WAF'
+      },
+      {
+        id: 4,
+        timestamp: '2024-01-15T14:27:33.012Z',
+        ip: '203.0.113.45',
+        method: 'GET',
+        url: '/api/files?path=../../../etc/passwd',
+        status: 403,
+        user_agent: 'curl/7.68.0',
+        response_size: 128,
+        response_time: 5,
+        threat_level: 'high',
+        triggered_rule: 'PATH_TRAVERSAL_DETECT',
+        headers: {
+          'Accept': '*/*',
+          'User-Agent': 'curl/7.68.0'
+        },
+        request_body: null,
+        response_body: 'Path traversal detected'
+      },
+      {
+        id: 5,
+        timestamp: '2024-01-15T14:26:12.345Z',
+        ip: '198.51.100.33',
+        method: 'GET',
+        url: '/images/logo.png',
+        status: 200,
+        user_agent: 'Mozilla/5.0 (iPhone; CPU iPhone OS 15_0 like Mac OS X)',
+        response_size: 15360,
+        response_time: 156,
+        threat_level: null,
+        triggered_rule: null,
+        headers: {
+          'Accept': 'image/webp,*/*',
+          'User-Agent': 'Mozilla/5.0 (iPhone; CPU iPhone OS 15_0 like Mac OS X)'
+        },
+        request_body: null,
+        response_body: null
+      }
+    ];
+
+    // 计算属性
+    const displayLogs = computed(() => {
+      let filtered = logs.value;
+      
+      // 搜索过滤
+      if (searchQuery.value) {
+        const query = searchQuery.value.toLowerCase();
+        filtered = filtered.filter(log => 
+          log.ip.includes(query) ||
+          log.url.toLowerCase().includes(query) ||
+          log.user_agent.toLowerCase().includes(query)
+        );
+      }
+      
+      // 级别过滤
+      if (logLevel.value) {
+        if (logLevel.value === 'blocked') {
+          filtered = filtered.filter(log => log.status >= 400);
+        } else if (logLevel.value === 'error') {
+          filtered = filtered.filter(log => log.status >= 500);
+        } else if (logLevel.value === 'warning') {
+          filtered = filtered.filter(log => log.threat_level === 'medium' || log.threat_level === 'high');
+        } else if (logLevel.value === 'info') {
+          filtered = filtered.filter(log => log.status < 400);
+        }
+      }
+      
+      // 状态过滤
+      if (statusFilter.value) {
+        filtered = filtered.filter(log => log.status.toString() === statusFilter.value);
+      }
+      
+      return filtered;
+    });
+
+    // 表格列定义
+    const columns = [
+      {
+        title: '时间',
+        key: 'timestamp',
+        width: 150,
+        render: (row) => formatTimestamp(row.timestamp, true)
+      },
+      {
+        title: 'IP地址',
+        key: 'ip',
+        width: 130,
+        render: (row) => h('n-tag', { 
+          type: row.threat_level ? 'error' : 'info',
+          size: 'small'
+        }, row.ip)
+      },
+      {
+        title: '方法',
+        key: 'method',
+        width: 80,
+        render: (row) => h('n-tag', {
+          type: getMethodType(row.method),
+          size: 'small'
+        }, row.method)
+      },
+      {
+        title: 'URL',
+        key: 'url',
+        width: 300,
+        ellipsis: {
+          tooltip: true
+        }
+      },
+      {
+        title: '状态',
+        key: 'status',
+        width: 80,
+        render: (row) => h('n-tag', {
+          type: getStatusType(row.status),
+          size: 'small'
+        }, row.status)
+      },
+      {
+        title: '威胁等级',
+        key: 'threat_level',
+        width: 100,
+        render: (row) => {
+          if (!row.threat_level) {
+            return h('n-tag', { type: 'success', size: 'small' }, '正常');
+          }
+          return h('n-tag', {
+            type: getThreatType(row.threat_level),
+            size: 'small'
+          }, row.threat_level);
+        }
+      },
+      {
+        title: '响应时间',
+        key: 'response_time',
+        width: 100,
+        render: (row) => `${row.response_time}ms`
+      },
+      {
+        title: '操作',
+        key: 'actions',
+        width: 120,
+        render: (row) => {
+          return h('n-space', [
+            h('n-button', {
+              size: 'small',
+              onClick: () => viewDetails(row)
+            }, {
+              default: () => '详情',
+              icon: () => h('n-icon', null, { default: () => h(EyeOutline) })
+            }),
+            h('n-button', {
+              size: 'small',
+              type: 'primary',
+              onClick: () => copyLog(row)
+            }, {
+              default: () => '复制',
+              icon: () => h('n-icon', null, { default: () => h(CopyOutline) })
+            })
+          ]);
+        }
+      }
+    ];
+
+    // 方法
+    const fetchLogs = async () => {
+      loading.value = true;
+      refreshing.value = true;
+      try {
+        const params = {
+          ...filters.value,
+          page: currentPage.value,
+          pageSize: pageSize.value
+        };
+        const response = await api.get('/logs', { params });
+        logs.value = response.data.logs;
+        totalCount.value = response.data.totalCount;
+        currentPage.value = response.data.page;
+      } catch (error) {
+        console.error('获取日志失败:', error);
+        // 使用模拟数据作为fallback
+        logs.value = mockLogs;
+        totalCount.value = mockLogs.length;
+      } finally {
+        loading.value = false;
+        refreshing.value = false;
+      }
+    };
+
+    const viewDetails = (log) => {
+      selectedLog.value = log;
+      showDetailModal.value = true;
+    };
+
+    const copyLog = async (log) => {
+      try {
+        await navigator.clipboard.writeText(JSON.stringify(log, null, 2));
+        message.success('日志信息已复制到剪贴板');
+      } catch (error) {
+        message.error('复制失败');
+      }
+    };
+
+    const applyFilters = () => {
+      filters.value = {
+        dateRange: dateRange.value,
+        logLevel: logLevel.value,
+        statusFilter: statusFilter.value,
+        searchQuery: searchQuery.value
+      };
+      currentPage.value = 1;
+      fetchLogs();
+      message.success('筛选条件已应用');
+    };
+
+    const clearFilters = () => {
+      dateRange.value = null;
+      logLevel.value = '';
+      statusFilter.value = '';
+      searchQuery.value = '';
+      filters.value = {};
+      currentPage.value = 1;
+      fetchLogs();
+      message.info('筛选条件已清除');
+    };
+
+    const changePage = (page) => {
+      currentPage.value = page;
+      fetchLogs();
+    };
+
+    const changePageSize = (size) => {
+      pageSize.value = size;
+      currentPage.value = 1;
+      fetchLogs();
+    };
+
+    const handleDateRangeChange = (value) => {
+      dateRange.value = value;
+    };
+
+    const handleFilter = () => {
+      // 过滤逻辑在计算属性中处理
+    };
+
+    const handleSearch = () => {
+      // 搜索逻辑在计算属性中处理
+    };
+
+    const exportLogs = () => {
+      message.info('日志导出功能开发中');
+    };
+
+    const addToBlacklist = (ip) => {
+      message.success(`IP ${ip} 已加入黑名单`);
+      showDetailModal.value = false;
+    };
+
+    // 工具方法
+    const formatTimestamp = (timestamp, short = false) => {
+      if (!timestamp) return '未知';
+      try {
+        const date = new Date(timestamp);
+        if (short) {
+          return date.toLocaleString('zh-CN', { 
+            month: '2-digit', 
+            day: '2-digit', 
+            hour: '2-digit', 
+            minute: '2-digit' 
+          });
+        }
+        return date.toLocaleString('zh-CN');
+      } catch {
+        return '未知';
+      }
+    };
+
+    const formatBytes = (bytes) => {
+      if (bytes === 0) return '0 Bytes';
+      const k = 1024;
+      const sizes = ['Bytes', 'KB', 'MB', 'GB'];
+      const i = Math.floor(Math.log(bytes) / Math.log(k));
+      return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+    };
+
+    const getMethodType = (method) => {
+      const types = {
+        'GET': 'info',
+        'POST': 'success',
+        'PUT': 'warning',
+        'DELETE': 'error',
+        'PATCH': 'warning'
+      };
+      return types[method] || 'default';
+    };
+
+    const getStatusType = (status) => {
+      if (status >= 200 && status < 300) return 'success';
+      if (status >= 300 && status < 400) return 'info';
+      if (status >= 400 && status < 500) return 'warning';
+      if (status >= 500) return 'error';
+      return 'default';
+    };
+
+    const getThreatType = (level) => {
+      const types = {
+        'low': 'success',
+        'medium': 'warning',
+        'high': 'error',
+        'critical': 'error'
+      };
+      return types[level] || 'default';
+    };
+
+    onMounted(() => {
+      fetchLogs();
+    });
+
+    return {
+      // 数据
+      logs,
+      displayLogs,
+      selectedLog,
+      currentPage,
+      pageSize,
+      totalCount,
+      loading,
+      refreshing,
+      showDetailModal,
+      dateRange,
+      logLevel,
+      statusFilter,
+      searchQuery,
+      columns,
+      
+      // 统计数据
+      todayLogs,
+      blockedLogs,
+      normalLogs,
+      suspiciousIps,
+      avgResponseTime,
+      
+      // 方法
+      fetchLogs,
+      viewDetails,
+      copyLog,
+      applyFilters,
+      clearFilters,
+      changePage,
+      changePageSize,
+      handleDateRangeChange,
+      handleFilter,
+      handleSearch,
+      exportLogs,
+      addToBlacklist,
+      formatTimestamp,
+      formatBytes,
+      getMethodType,
+      getStatusType,
+      getThreatType
+    };
+  }
+};
+</script>
+
+<style scoped>
+</style>

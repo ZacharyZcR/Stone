@@ -54,12 +54,3 @@ export default {
 };
 </script>
 
-<style scoped>
-.filter-input {
-  @apply shadow appearance-none border-2 border-gray-700 rounded w-full py-2 px-3 bg-gray-900 text-white leading-tight focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-indigo-500 transition duration-300;
-}
-
-.filter-button {
-  @apply bg-blue-500 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transform hover:scale-105 transition duration-300 border-2 border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-opacity-50 w-full;
-}
-</style>
