@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"Stone/backend/pkg/health"
 	"Stone/backend/pkg/monitoring"
 	"context"
 	"github.com/gin-gonic/gin"
@@ -71,8 +72,19 @@ func GetStatus(c *gin.Context) {
 	// 获取真实的进程数量
 	numProcesses := getProcessCount()
 
+	// 获取健康检查状态
+	systemHealth := health.CheckSystemHealth()
+	
+	// 获取内存指标
+	inMemoryMetrics := monitoring.GetInMemoryMetrics()
+
+	status := "running"
+	if systemHealth.DegradedMode {
+		status = "degraded"
+	}
+
 	c.JSON(http.StatusOK, gin.H{
-		"status":            "running",
+		"status":            status,
 		"uptime":            uptime,
 		"cpu_usage_percent": cpuPercent[0],
 		"memory_usage":      vmStat.UsedPercent,
@@ -83,6 +95,12 @@ func GetStatus(c *gin.Context) {
 		"open_file_desc":    numFDs,
 		"threads":           numThreads,
 		"processes":         numProcesses,
+		
+		// Health information
+		"health": systemHealth,
+		
+		// Current session metrics (always available)
+		"session_metrics": inMemoryMetrics,
 	})
 }
 
@@ -102,7 +120,22 @@ type DailyMetrics struct {
 
 func GetFirewallMetrics(c *gin.Context) {
 	if metricsCollection == nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Metrics collection is not initialized"})
+		// In degraded mode, return in-memory metrics only
+		log.Printf("MongoDB not available, returning in-memory metrics")
+		inMemoryMetrics := monitoring.GetInMemoryMetrics()
+		
+		// Return a single day entry with current session data
+		today := time.Now().Format("2006-01-02")
+		response := []gin.H{
+			{
+				"date":               today,
+				"success_requests":   inMemoryMetrics.WebsiteRequestsTotal,
+				"blacklist_requests": inMemoryMetrics.BlockedByBlacklistTotal,
+				"rules_requests":     inMemoryMetrics.BlockedByRulesTotal,
+			},
+		}
+		
+		c.JSON(http.StatusOK, response)
 		return
 	}
 

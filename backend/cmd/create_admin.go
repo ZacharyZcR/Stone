@@ -36,7 +36,7 @@ func main() {
 	}
 
 	// 连接MongoDB
-	client, err := mongo.Connect(context.Background(), options.Client().ApplyURI("mongodb://localhost:27019"))
+	client, err := mongo.Connect(context.Background(), options.Client().ApplyURI("mongodb://localhost:27017"))
 	if err != nil {
 		log.Fatalf("无法连接到MongoDB: %v", err)
 	}

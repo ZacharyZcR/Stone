@@ -84,6 +84,15 @@ func SetupRouter(configCollection *mongo.Collection, userCollection *mongo.Colle
 
 		// 防火墙指标API
 		authenticated.GET("/firewall/metrics", handlers.GetFirewallMetrics)
+		
+		// 速率限制管理API
+		authenticated.GET("/rate-limit-rules", handlers.GetRateLimitRules)
+		authenticated.GET("/rate-limit-rules/:id", handlers.GetRateLimitRule)
+		authenticated.POST("/rate-limit-rules", handlers.CreateRateLimitRule)
+		authenticated.PUT("/rate-limit-rules/:id", handlers.UpdateRateLimitRule)
+		authenticated.DELETE("/rate-limit-rules/:id", handlers.DeleteRateLimitRule)
+		authenticated.GET("/rate-limit/stats", handlers.GetRateLimitStats)
+		authenticated.POST("/rate-limit/reset", handlers.ResetRateLimitCounters)
 	}
 
 	return router

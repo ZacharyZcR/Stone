@@ -11,7 +11,7 @@ import (
 
 func main() {
 	// 初始化MongoDB客户端
-	client, err := mongo.Connect(context.Background(), options.Client().ApplyURI("mongodb://localhost:27019"))
+	client, err := mongo.Connect(context.Background(), options.Client().ApplyURI("mongodb://localhost:27017"))
 	if err != nil {
 		fmt.Printf("无法连接到MongoDB: %v\n", err)
 		return
@@ -23,6 +23,7 @@ func main() {
 	rulesCollection := client.Database("stoneDB").Collection("rules")
 	logsCollection := client.Database("stoneDB").Collection("logs")
 	metricsCollection := client.Database("stoneDB").Collection("metrics") // 新增的指标集合
+	rateLimitCollection := client.Database("stoneDB").Collection("rate_limits") // 速率限制集合
 
 	// 插入配置文档
 	configDoc := bson.M{
@@ -86,6 +87,7 @@ func main() {
 		"websiteRequestsTotal":    0,
 		"blockedByBlacklistTotal": 0,
 		"blockedByRulesTotal":     0,
+		"blockedByRateLimitTotal": 0, // 新增速率限制指标
 	}
 
 	_, err = metricsCollection.InsertOne(context.Background(), initialMetrics)
@@ -93,6 +95,33 @@ func main() {
 		fmt.Printf("初始化指标集合失败: %v\n", err)
 		return
 	}
+	
+	// 初始化速率限制规则集合
+	rateLimitRulesDoc := bson.M{
+		"type": "rate_limit",
+		"rules": []bson.M{
+			{
+				"id":          1,
+				"name":        "Default Rate Limit",
+				"description": "Default rate limiting rule for all IPs",
+				"enabled":     true,
+				"capacity":    60,            // 60个令牌
+				"refill_rate": 10,            // 每秒补充10个
+				"window":      60,            // 60秒窗口（以秒为单位存储）
+				"action":      "block",       // 阻断
+				"block_time":  300,           // 阻断5分钟
+				"created_at":  time.Now().Format("2006-01-02 15:04:05"),
+				"triggered_count": 0,
+			},
+		},
+		"created_at": time.Now().Format("2006-01-02 15:04:05"),
+	}
 
-	fmt.Println("初始化完成")
+	_, err = rateLimitCollection.InsertOne(context.Background(), rateLimitRulesDoc)
+	if err != nil {
+		fmt.Printf("初始化速率限制规则失败: %v\n", err)
+		return
+	}
+
+	fmt.Println("初始化完成，包括速率限制规则")
 }

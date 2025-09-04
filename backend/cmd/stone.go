@@ -5,8 +5,10 @@ import (
 	"Stone/backend/pkg/api/handlers"
 	"Stone/backend/pkg/capture"
 	"Stone/backend/pkg/config"
+	"Stone/backend/pkg/health"
 	"Stone/backend/pkg/logging"
 	"Stone/backend/pkg/monitoring"
+	"Stone/backend/pkg/ratelimit"
 	"Stone/backend/pkg/rules"
 	"context"
 	"fmt"
@@ -21,14 +23,14 @@ func main() {
 	logging.LogInfo("启动Stone防火墙")
 
 	// 初始化存储（Redis 和 MongoDB）
-	err := logging.InitStorage("localhost:6379", "mongodb://localhost:27019", "stoneDB", "logs")
+	err := logging.InitStorage("localhost:6379", "mongodb://localhost:27017", "stoneDB", "logs")
 	if err != nil {
 		logging.LogError(fmt.Errorf("初始化存储失败: %v", err))
 		return
 	}
 
 	// 获取MongoDB集合
-	client, err := mongo.Connect(context.Background(), options.Client().ApplyURI("mongodb://localhost:27019"))
+	client, err := mongo.Connect(context.Background(), options.Client().ApplyURI("mongodb://localhost:27017"))
 	if err != nil {
 		logging.LogError(fmt.Errorf("无法连接到MongoDB: %v", err))
 		return
@@ -46,6 +48,10 @@ func main() {
 	monitoring.SetMongoCollection(metricsCollection)
 	handlers.SetUserCollection(userCollection) // 设置用户集合
 	handlers.SetMetricsCollection(metricsCollection)
+	
+	// 初始化健康检查系统
+	health.SetMongoCollection(configCollection) // 使用config集合进行健康检查
+	health.StartHealthMonitor() // 启动健康监控协程
 
 	// 从MongoDB加载配置
 	cfg, err := config.LoadConfig(context.Background())
@@ -66,6 +72,11 @@ func main() {
 		logging.LogError(fmt.Errorf("加载IP控制规则失败: %v", err))
 		return
 	}
+	
+	// 初始化速率限制器
+	rateLimitCollection := client.Database("stoneDB").Collection("rate_limits")
+	ratelimit.Init(rateLimitCollection)
+	logging.LogInfo("速率限制器已初始化")
 
 	logging.LogInfo(fmt.Sprintf("服务器将在端口 %d 上运行", cfg.Server.Port))
 	logging.LogInfo(fmt.Sprintf("防火墙模式: %s", cfg.Firewall.Mode))

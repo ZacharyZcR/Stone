@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net"
+	"os"
 	"regexp"
 	"strings"
 	"time"
@@ -61,14 +62,9 @@ func InitStorage(redisAddr, mongoURI, mongoDB, mongoCollectionName string) error
 	return nil
 }
 
-// LogTraffic 保存流量日志到Redis和MongoDB
+// LogTraffic 保存流量日志到Redis和MongoDB，支持降级模式
 func LogTraffic(logData map[string]interface{}) error {
-	// 至少要有MongoDB客户端初始化
-	if mongoCollection == nil {
-		return fmt.Errorf("MongoDB客户端未初始化")
-	}
-
-	// 将日志数据转换为JSON字符串
+	// 将日志数据转换为JSON字符串（总是需要，用于降级记录）
 	logDataJSON, err := json.Marshal(logData)
 	if err != nil {
 		return fmt.Errorf("JSON序列化失败: %v", err)
@@ -84,10 +80,43 @@ func LogTraffic(logData map[string]interface{}) error {
 		}
 	}
 
-	// 将日志保存到MongoDB（主要存储）
-	_, err = mongoCollection.InsertOne(ctx, logData)
+	// 尝试将日志保存到MongoDB（主要存储）
+	if mongoCollection != nil {
+		_, err = mongoCollection.InsertOne(ctx, logData)
+		if err != nil {
+			// MongoDB失败时降级到本地文件日志
+			fallbackErr := logToFile(logDataJSON)
+			if fallbackErr != nil {
+				return fmt.Errorf("MongoDB保存失败且降级日志失败: %v (fallback: %v)", err, fallbackErr)
+			}
+			// MongoDB失败但降级成功，只记录警告
+			fmt.Printf("MongoDB保存失败，已降级到文件日志: %v\n", err)
+			return nil
+		}
+	} else {
+		// MongoDB未初始化，直接使用文件日志
+		return logToFile(logDataJSON)
+	}
+
+	return nil
+}
+
+// logToFile 降级时将日志写入本地文件
+func logToFile(logDataJSON []byte) error {
+	// 创建或打开降级日志文件
+	file, err := os.OpenFile("stone_traffic_fallback.log", os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0644)
 	if err != nil {
-		return fmt.Errorf("保存到MongoDB失败: %v", err)
+		return fmt.Errorf("无法打开降级日志文件: %v", err)
+	}
+	defer file.Close()
+
+	// 写入时间戳和日志数据
+	timestamp := time.Now().Format("2006-01-02 15:04:05")
+	logLine := fmt.Sprintf("[%s] %s\n", timestamp, logDataJSON)
+	
+	_, err = file.WriteString(logLine)
+	if err != nil {
+		return fmt.Errorf("写入降级日志失败: %v", err)
 	}
 
 	return nil

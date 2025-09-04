@@ -1,7 +1,9 @@
 package processing
 
 import (
+	"Stone/backend/pkg/health"
 	"Stone/backend/pkg/monitoring"
+	"Stone/backend/pkg/ratelimit"
 	"Stone/backend/pkg/rules"
 	"Stone/backend/pkg/utils"
 	"bufio"
@@ -13,173 +15,354 @@ import (
 	"net/http"
 	"os"
 	"strings"
+	"sync"
+	"time"
 )
 
-// HandleHTTPConnection 处理HTTP连接
-func HandleHTTPConnection(clientConn net.Conn, targetAddress string) {
-	defer clientConn.Close()
+// ErrorType represents different types of HTTP errors
+type ErrorType int
 
-	// 获取客户端IP
-	clientIP, _, _ := net.SplitHostPort(clientConn.RemoteAddr().String())
+const (
+	ErrorTLSRequired ErrorType = iota
+	ErrorBadGateway
+	ErrorForbidden
+	ErrorInternal
+	ErrorRateLimit
+)
 
-	// 尝试将IPv6地址转换为IPv4地址
-	clientIP = convertIPv6ToIPv4(clientIP)
+// HTTPProxy handles HTTP connections with connection pooling
+type HTTPProxy struct {
+	backendPool  *BackendPool
+	errorHandler *ErrorHandler
+}
 
-	// 创建bufio.Reader
-	reader := bufio.NewReader(clientConn)
+// BackendPool manages HTTP client connections
+type BackendPool struct {
+	clients    sync.Map      // string -> *http.Client
+	timeout    time.Duration
+	maxClients int
+	cleanup    *time.Ticker
+}
 
-	// 创建HTTP客户端
-	client := &http.Client{}
+// ErrorHandler manages error responses
+type ErrorHandler struct {
+	templates map[ErrorType][]byte
+}
 
-	for {
-		// 读取客户端请求
-		request, err := http.ReadRequest(reader)
-		if err != nil {
-			if err != io.EOF {
-				// 检查是否是TLS连接尝试
-				if strings.Contains(err.Error(), "malformed HTTP request") || strings.Contains(err.Error(), "invalid method") {
-					fmt.Printf("检测到非HTTP协议连接 (可能是HTTPS/TLS): %v\n", err)
-					// 返回426 Upgrade Required
-					upgradeResponse := "HTTP/1.1 426 Upgrade Required\r\n" +
-						"Upgrade: TLS/1.0, HTTP/1.1\r\n" +
-						"Connection: Upgrade\r\n" +
-						"Content-Type: text/html; charset=UTF-8\r\n" +
-						"Content-Length: 97\r\n" +
-						"\r\n" +
-						"<html><body><h1>426 Upgrade Required</h1><p>This service requires HTTPS/TLS.</p></body></html>"
-					
-					clientConn.Write([]byte(upgradeResponse))
-				} else {
-					fmt.Printf("读取HTTP请求失败: %v\n", err)
-				}
-			}
-			// 不记录TLS握手失败为错误日志，减少噪音
-			if !strings.Contains(err.Error(), "malformed HTTP request") {
-				utils.LogTraffic(clientIP, targetAddress, "", "", nil, "", err.Error())
-			}
-			return
-		}
-
-		// 检查IP是否在黑名单
-		allowed, inWhitelist := rules.IsAllowed(clientIP)
-		if !allowed {
-			fmt.Printf("IP在黑名单中，连接已阻断: %s\n", clientIP)
-			utils.LogTraffic(clientIP, targetAddress, request.URL.String(), request.Method, request.Header, "", "IP在黑名单中")
-			monitoring.IncrementMetric("blockedByBlacklistTotal")
-			sendBlockedResponse(clientConn, "blocked.html")
-			return
-		}
-
-		// 如果IP不在白名单，进行URL和包体检查
-		if !inWhitelist && !rules.CheckRequest(request) {
-			fmt.Println("检测到危险请求，连接已阻断")
-			utils.LogTraffic(clientIP, targetAddress, request.URL.String(), request.Method, request.Header, "", "Blocked by rules")
-			monitoring.IncrementMetric("blockedByRulesTotal")
-			sendBlockedResponse(clientConn, "blocked.html")
-			return
-		}
-
-		// 设置目标地址
-		request.URL.Scheme = "http"
-		request.URL.Host = targetAddress
-		request.RequestURI = ""
-
-		// 发送请求到目标服务
-		response, err := client.Do(request)
-		if err != nil {
-			fmt.Printf("目标服务不可用 %s: %v\n", targetAddress, err)
-			utils.LogTraffic(clientIP, targetAddress, request.URL.String(), request.Method, request.Header, "", fmt.Sprintf("目标服务不可用: %v", err))
-			
-			// 返回502 Bad Gateway错误给客户端
-			badGatewayResponse := "HTTP/1.1 502 Bad Gateway\r\n" +
-				"Content-Type: text/html; charset=UTF-8\r\n" +
-				"Content-Length: 85\r\n" +
-				"Connection: close\r\n" +
-				"\r\n" +
-				"<html><body><h1>502 Bad Gateway</h1><p>The upstream server is down.</p></body></html>"
-			
-			clientConn.Write([]byte(badGatewayResponse))
-			return
-		}
-
-		// 将响应写回客户端
-		if err := response.Write(clientConn); err != nil {
-			fmt.Println("写回客户端失败:", err)
-			response.Body.Close()
-			utils.LogTraffic(clientIP, targetAddress, request.URL.String(), request.Method, request.Header, "", err.Error())
-			return
-		}
-
-		// 请求成功，更新访问计数
-		err = monitoring.IncrementMetric("websiteRequestsTotal")
-		if err != nil {
-			log.Printf("Failed to increment websiteRequestsTotal: %v", err)
-		}
-		utils.LogTraffic(clientIP, targetAddress, request.URL.String(), request.Method, request.Header, "", "")
-
-		// 关闭响应体
-		response.Body.Close()
-
-		// 检查是否需要保持连接
-		if !response.Close && response.Header.Get("Connection") != "close" {
-			continue
-		}
-		break
+// NewHTTPProxy creates a new HTTP proxy with connection pooling
+func NewHTTPProxy() *HTTPProxy {
+	return &HTTPProxy{
+		backendPool:  newBackendPool(),
+		errorHandler: newErrorHandler(),
 	}
 }
 
-func sendBlockedResponse(conn net.Conn, filePath string) {
-	// 读取HTML文件内容
-	htmlContent, err := os.ReadFile(filePath)
-	if err != nil {
-		fmt.Println("无法读取被阻断响应文件:", err)
+// newBackendPool creates a backend connection pool with cleanup
+func newBackendPool() *BackendPool {
+	bp := &BackendPool{
+		timeout:    30 * time.Second,
+		maxClients: 100,
+		cleanup:    time.NewTicker(5 * time.Minute),
+	}
+	
+	// Start cleanup routine
+	go bp.cleanupRoutine()
+	return bp
+}
+
+// cleanupRoutine periodically cleans idle connections
+func (bp *BackendPool) cleanupRoutine() {
+	for range bp.cleanup.C {
+		clientCount := 0
+		bp.clients.Range(func(key, value interface{}) bool {
+			clientCount++
+			// For now, just count. In production, implement LRU eviction
+			return true
+		})
+		
+		if clientCount > bp.maxClients {
+			log.Printf("Warning: %d HTTP clients in pool, consider increasing maxClients", clientCount)
+		}
+	}
+}
+
+// newErrorHandler creates an error handler with pre-compiled templates
+func newErrorHandler() *ErrorHandler {
+	eh := &ErrorHandler{
+		templates: make(map[ErrorType][]byte),
+	}
+	
+	// Pre-compile error responses to avoid string concatenation
+	eh.templates[ErrorTLSRequired] = []byte(
+		"HTTP/1.1 426 Upgrade Required\r\n" +
+		"Upgrade: TLS/1.0, HTTP/1.1\r\n" +
+		"Connection: Upgrade\r\n" +
+		"Content-Type: text/html; charset=UTF-8\r\n" +
+		"Content-Length: 97\r\n" +
+		"\r\n" +
+		"<html><body><h1>426 Upgrade Required</h1><p>This service requires HTTPS/TLS.</p></body></html>")
+	
+	eh.templates[ErrorBadGateway] = []byte(
+		"HTTP/1.1 502 Bad Gateway\r\n" +
+		"Content-Type: text/html; charset=UTF-8\r\n" +
+		"Content-Length: 85\r\n" +
+		"Connection: close\r\n" +
+		"\r\n" +
+		"<html><body><h1>502 Bad Gateway</h1><p>The upstream server is down.</p></body></html>")
+	
+	eh.templates[ErrorInternal] = []byte(
+		"HTTP/1.1 500 Internal Server Error\r\n" +
+		"Content-Length: 0\r\n" +
+		"Connection: close\r\n" +
+		"\r\n")
+	
+	eh.templates[ErrorRateLimit] = []byte(
+		"HTTP/1.1 429 Too Many Requests\r\n" +
+		"Content-Type: text/html; charset=UTF-8\r\n" +
+		"Content-Length: 98\r\n" +
+		"Retry-After: 300\r\n" +
+		"Connection: close\r\n" +
+		"\r\n" +
+		"<html><body><h1>429 Too Many Requests</h1><p>Rate limit exceeded. Try again later.</p></body></html>")
+	
+	return eh
+}
+
+// Global proxy instance - initialized once
+var defaultProxy *HTTPProxy
+
+func init() {
+	defaultProxy = NewHTTPProxy()
+}
+
+// HandleHTTPConnection - simplified public interface
+func HandleHTTPConnection(clientConn net.Conn, targetAddress string) {
+	defaultProxy.HandleConnection(clientConn, targetAddress)
+}
+
+// HandleConnection processes HTTP connections
+func (p *HTTPProxy) HandleConnection(conn net.Conn, target string) {
+	defer conn.Close()
+	
+	clientIP := p.getClientIP(conn)
+	reader := bufio.NewReader(conn)
+	
+	for {
+		req, err := p.parseRequest(reader)
+		if err != nil {
+			p.handleRequestError(conn, clientIP, target, err)
+			return
+		}
+		
+		if blocked := p.checkAndBlockIfNeeded(conn, req, clientIP, target); blocked {
+			return // Request was blocked, response already sent
+		}
+		
+		resp, err := p.forwardRequest(req, target)
+		if err != nil {
+			p.errorHandler.sendError(conn, ErrorBadGateway)
+			utils.LogTraffic(clientIP, target, req.URL.String(), req.Method, req.Header, "", err.Error())
+			return
+		}
+		
+		if err := p.writeResponse(conn, resp); err != nil {
+			resp.Body.Close()
+			utils.LogTraffic(clientIP, target, req.URL.String(), req.Method, req.Header, "", err.Error())
+			return
+		}
+		
+		p.logSuccess(clientIP, target, req)
+		resp.Body.Close()
+		
+		if p.shouldClose(resp) {
+			break
+		}
+	}
+}
+
+// getClientIP extracts and normalizes client IP
+func (p *HTTPProxy) getClientIP(conn net.Conn) string {
+	clientIP, _, _ := net.SplitHostPort(conn.RemoteAddr().String())
+	return convertIPv6ToIPv4(clientIP)
+}
+
+// parseRequest reads and validates HTTP request
+func (p *HTTPProxy) parseRequest(reader *bufio.Reader) (*http.Request, error) {
+	return http.ReadRequest(reader)
+}
+
+// handleRequestError processes request parsing errors
+func (p *HTTPProxy) handleRequestError(conn net.Conn, clientIP, target string, err error) {
+	if err == io.EOF {
 		return
 	}
+	
+	if p.isTLSError(err) {
+		log.Printf("TLS connection attempt from %s: %v", clientIP, err)
+		p.errorHandler.sendError(conn, ErrorTLSRequired)
+		return
+	}
+	
+	log.Printf("Request parsing failed from %s: %v", clientIP, err)
+	utils.LogTraffic(clientIP, target, "", "", nil, "", err.Error())
+}
 
-	// 使用403 Forbidden状态码，符合WAF拦截语义
-	statusCode := 403
-	statusText := "Forbidden"
+// isTLSError checks if error indicates TLS connection attempt
+func (p *HTTPProxy) isTLSError(err error) bool {
+	errorStr := err.Error()
+	return strings.Contains(errorStr, "malformed HTTP request") ||
+		strings.Contains(errorStr, "invalid method")
+}
 
-	// 生成随机长度的随机字符串（1000到3000个字符），减少资源消耗
+// checkAndBlockIfNeeded performs security checks and sends blocking response if needed
+func (p *HTTPProxy) checkAndBlockIfNeeded(conn net.Conn, req *http.Request, clientIP, target string) bool {
+	if health.IsSystemInDegradedMode() {
+		log.Printf("Degraded mode - skipping security checks for %s", clientIP)
+		return false
+	}
+	
+	// 1. IP黑白名单检查
+	allowed, inWhitelist := rules.IsAllowed(clientIP)
+	if !allowed {
+		log.Printf("IP blacklisted: %s", clientIP)
+		utils.LogTraffic(clientIP, target, req.URL.String(), req.Method, req.Header, "", "IP blacklisted")
+		monitoring.IncrementMetric("blockedByBlacklistTotal")
+		p.errorHandler.sendBlockedResponse(conn, "blocked.html")
+		return true
+	}
+	
+	// 2. 速率限制检查（白名单IP豁免）
+	if !inWhitelist {
+		rateLimited, action := ratelimit.IsAllowed(clientIP)
+		if !rateLimited {
+			log.Printf("Rate limit exceeded for %s, action: %s", clientIP, action)
+			utils.LogTraffic(clientIP, target, req.URL.String(), req.Method, req.Header, "", "Rate limit exceeded")
+			monitoring.IncrementMetric("blockedByRateLimitTotal")
+			
+			switch action {
+			case "block":
+				p.errorHandler.sendError(conn, ErrorRateLimit)
+			case "delay":
+				time.Sleep(2 * time.Second) // 简单延迟
+				p.errorHandler.sendError(conn, ErrorRateLimit)
+			default:
+				p.errorHandler.sendError(conn, ErrorRateLimit)
+			}
+			return true
+		}
+	}
+	
+	// 3. WAF规则检查
+	if !inWhitelist && !rules.CheckRequest(req) {
+		log.Printf("Request blocked by rules from %s", clientIP)
+		utils.LogTraffic(clientIP, target, req.URL.String(), req.Method, req.Header, "", "Blocked by rules")
+		monitoring.IncrementMetric("blockedByRulesTotal")
+		p.errorHandler.sendBlockedResponse(conn, "blocked.html")
+		return true
+	}
+	
+	return false
+}
+
+// forwardRequest sends request to backend with connection pooling
+func (p *HTTPProxy) forwardRequest(req *http.Request, target string) (*http.Response, error) {
+	req.URL.Scheme = "http"
+	req.URL.Host = target
+	req.RequestURI = ""
+	
+	client := p.backendPool.getClient(target)
+	return client.Do(req)
+}
+
+// writeResponse streams response back to client
+func (p *HTTPProxy) writeResponse(conn net.Conn, resp *http.Response) error {
+	return resp.Write(conn)
+}
+
+// logSuccess records successful request
+func (p *HTTPProxy) logSuccess(clientIP, target string, req *http.Request) {
+	monitoring.IncrementMetric("websiteRequestsTotal")
+	utils.LogTraffic(clientIP, target, req.URL.String(), req.Method, req.Header, "", "")
+}
+
+// shouldClose determines if connection should be closed
+func (p *HTTPProxy) shouldClose(resp *http.Response) bool {
+	return resp.Close || resp.Header.Get("Connection") == "close"
+}
+
+// getClient returns HTTP client for target with connection pooling
+func (bp *BackendPool) getClient(target string) *http.Client {
+	if client, ok := bp.clients.Load(target); ok {
+		return client.(*http.Client)
+	}
+	
+	// Create optimized transport for this target
+	transport := &http.Transport{
+		MaxIdleConns:          100,
+		MaxIdleConnsPerHost:   20,   // Increased for better connection reuse
+		IdleConnTimeout:       90 * time.Second,
+		TLSHandshakeTimeout:   10 * time.Second,
+		ResponseHeaderTimeout: 10 * time.Second,
+		ExpectContinueTimeout: 1 * time.Second,
+	}
+	
+	client := &http.Client{
+		Timeout:   bp.timeout,
+		Transport: transport,
+	}
+	
+	bp.clients.Store(target, client)
+	return client
+}
+
+// sendError sends pre-compiled error responses (zero allocation)
+func (eh *ErrorHandler) sendError(conn net.Conn, errType ErrorType) {
+	if response, ok := eh.templates[errType]; ok {
+		conn.Write(response)
+	} else {
+		conn.Write(eh.templates[ErrorInternal])
+	}
+}
+
+// sendBlockedResponse sends WAF blocking response
+func (eh *ErrorHandler) sendBlockedResponse(conn net.Conn, filePath string) {
+	htmlContent, err := os.ReadFile(filePath)
+	if err != nil {
+		log.Printf("Failed to read blocked response file: %v", err)
+		eh.sendError(conn, ErrorForbidden)
+		return
+	}
+	
+	// Generate anti-fingerprint noise
 	randomLength := rand.Intn(2001) + 1000
 	randomString := make([]byte, randomLength)
 	for i := range randomString {
-		randomString[i] = byte(rand.Intn(94) + 33) // 可打印ASCII字符
+		randomString[i] = byte(rand.Intn(94) + 33)
 	}
-
-	// 将随机字符串作为HTML注释插入到HTML内容中
-	htmlWithRandomString := []byte(fmt.Sprintf("%s\n<!-- %s -->", htmlContent, randomString))
-
-	// 构造响应
-	response := fmt.Sprintf("HTTP/1.1 %d %s\r\n"+
+	
+	htmlWithNoise := fmt.Sprintf("%s\n<!-- %s -->", htmlContent, randomString)
+	response := fmt.Sprintf("HTTP/1.1 403 Forbidden\r\n"+
 		"Content-Type: text/html; charset=UTF-8\r\n"+
 		"Content-Length: %d\r\n"+
 		"Connection: close\r\n"+
 		"\r\n"+
 		"%s",
-		statusCode,
-		statusText,
-		len(htmlWithRandomString),
-		htmlWithRandomString)
-
-	// 发送响应
-	_, err = conn.Write([]byte(response))
-	if err != nil {
-		fmt.Println("写回被阻断响应失败:", err)
-	}
+		len(htmlWithNoise),
+		htmlWithNoise)
+	
+	conn.Write([]byte(response))
 }
 
-// 新增函数: 尝试将IPv6地址转换为IPv4地址
+// convertIPv6ToIPv4 normalizes IPv6-mapped IPv4 addresses
 func convertIPv6ToIPv4(ipAddress string) string {
 	ip := net.ParseIP(ipAddress)
 	if ip == nil {
-		return ipAddress // 如果解析失败,返回原始地址
+		return ipAddress
 	}
-
-	if ip.To4() != nil {
-		return ip.To4().String() // 如果是IPv4或者可以转换为IPv4,返回IPv4地址
+	
+	if ip4 := ip.To4(); ip4 != nil {
+		return ip4.String()
 	}
-
-	// 对于无法转换的IPv6地址,保持原样
+	
 	return ipAddress
 }
