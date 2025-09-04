@@ -18,10 +18,19 @@ import (
 )
 
 type Pattern struct {
-	Name         string         `bson:"name" json:"name"`
-	Regex        string         `bson:"regex" json:"regex"`
-	Method       string         `bson:"method" json:"method"` // 添加HTTP请求方法
-	CompiledRegex *regexp.Regexp `bson:"-" json:"-"`           // 预编译的正则表达式
+	ID            int            `bson:"id" json:"id"`
+	Name          string         `bson:"name" json:"name"`
+	Type          string         `bson:"type" json:"type"`
+	Description   string         `bson:"description" json:"description"`
+	Pattern       string         `bson:"pattern" json:"pattern"` // 前端期望的字段名
+	Regex         string         `bson:"regex" json:"regex"`     // 内部使用的正则表达式
+	Method        string         `bson:"method" json:"method"`
+	RiskLevel     string         `bson:"risk_level" json:"risk_level"`
+	Action        string         `bson:"action" json:"action"`
+	Enabled       bool           `bson:"enabled" json:"enabled"`
+	CreatedAt     string         `bson:"created_at" json:"created_at"`
+	TriggeredCount int           `bson:"triggered_count" json:"triggered_count"`
+	CompiledRegex *regexp.Regexp `bson:"-" json:"-"`
 }
 
 // InterceptionRules 用于存储拦截规则
@@ -56,16 +65,22 @@ func SetMongoCollection(collection *mongo.Collection) {
 // compileRegexPatterns 预编译所有正则表达式，防止ReDoS攻击
 func compileRegexPatterns(rules *InterceptionRules) error {
 	for i := range rules.Rules {
-		if rules.Rules[i].Regex == "" {
+		// 使用Pattern字段作为正则表达式，如果为空则使用Regex字段
+		regexPattern := rules.Rules[i].Pattern
+		if regexPattern == "" {
+			regexPattern = rules.Rules[i].Regex
+		}
+		
+		if regexPattern == "" {
 			continue
 		}
 		
 		// 验证正则表达式复杂度，防止ReDoS
-		if len(rules.Rules[i].Regex) > 200 {
+		if len(regexPattern) > 200 {
 			return fmt.Errorf("正则表达式过长，可能存在ReDoS风险: %s", rules.Rules[i].Name)
 		}
 		
-		compiled, err := regexp.Compile(rules.Rules[i].Regex)
+		compiled, err := regexp.Compile(regexPattern)
 		if err != nil {
 			return fmt.Errorf("正则表达式编译失败 [%s]: %w", rules.Rules[i].Name, err)
 		}

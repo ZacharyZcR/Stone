@@ -44,13 +44,17 @@ func HandleInterceptionRules(c *gin.Context) {
 			c.JSON(http.StatusBadRequest, gin.H{"error": "Rule name cannot be empty"})
 			return
 		}
-		if newRule.Regex == "" {
-			c.JSON(http.StatusBadRequest, gin.H{"error": "Rule regex cannot be empty"})
+		// 检查pattern或regex至少有一个不为空
+		if newRule.Pattern == "" && newRule.Regex == "" {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "Rule pattern or regex cannot be empty"})
 			return
 		}
+		// 如果pattern不为空，将其同时设置到regex字段用于内部处理
+		if newRule.Pattern != "" {
+			newRule.Regex = newRule.Pattern
+		}
 		if newRule.Method == "" {
-			c.JSON(http.StatusBadRequest, gin.H{"error": "Rule method cannot be empty"})
-			return
+			newRule.Method = "GET" // 默认GET方法
 		}
 		if err := rules.AddInterceptionRule(newRule); err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to add interception rule"})
