@@ -363,9 +363,9 @@ export default {
       if (!statusInfo.value) return {}
       return {
         uptime: statusInfo.value.uptime,
-        connections: statusInfo.value.connections,
+        processes: statusInfo.value.processes,
         memory_usage: statusInfo.value.memory_usage,
-        cpu_usage: statusInfo.value.cpu_usage
+        cpu_usage: statusInfo.value.cpu_usage_percent
       }
     })
     
@@ -373,7 +373,7 @@ export default {
     const formatTitle = (key) => {
       const titleMap = {
         uptime: '运行时间',
-        connections: '连接数',
+        processes: '进程数',
         memory_usage: '内存使用',
         cpu_usage: 'CPU使用率'
       }
@@ -383,10 +383,17 @@ export default {
     // 格式化值
     const formatValue = (key, value) => {
       if (key === 'uptime') {
+        // 处理后端返回的时间字符串格式如 "15m50.455147457s"
+        if (typeof value === 'string') {
+          return value.replace(/(\d+)m(\d+\.\d+)s/, '$1分$2秒')
+        }
         return Math.floor(value / 3600) + '小时'
       }
       if (key === 'memory_usage' || key === 'cpu_usage') {
         return Math.round(value) + '%'
+      }
+      if (key === 'processes') {
+        return value + '个'
       }
       return value
     }
@@ -444,37 +451,67 @@ export default {
     }
     
     // IP管理
-    const addToBlacklist = () => {
+    const addToBlacklist = async () => {
       if (newBlacklistIP.value) {
-        blacklist.value.push(newBlacklistIP.value)
-        newBlacklistIP.value = ''
-        showAddBlacklistModal.value = false
-        message.success('IP已添加到黑名单')
+        try {
+          await api.post('/ip-control-rules', {
+            ip: newBlacklistIP.value,
+            type: 'blacklist'
+          })
+          blacklist.value.push(newBlacklistIP.value)
+          newBlacklistIP.value = ''
+          showAddBlacklistModal.value = false
+          message.success('IP已添加到黑名单')
+        } catch (error) {
+          console.error('添加黑名单失败:', error)
+          message.error('添加黑名单失败')
+        }
       }
     }
     
-    const removeFromBlacklist = (ip) => {
-      const index = blacklist.value.indexOf(ip)
-      if (index > -1) {
-        blacklist.value.splice(index, 1)
+    const removeFromBlacklist = async (ip) => {
+      try {
+        await api.delete(`/ip-control-rules/${ip}`)
+        const index = blacklist.value.indexOf(ip)
+        if (index > -1) {
+          blacklist.value.splice(index, 1)
+        }
         message.success('IP已从黑名单移除')
+      } catch (error) {
+        console.error('移除黑名单失败:', error)
+        message.error('移除黑名单失败')
       }
     }
     
-    const addToWhitelist = () => {
+    const addToWhitelist = async () => {
       if (newWhitelistIP.value) {
-        whitelist.value.push(newWhitelistIP.value)
-        newWhitelistIP.value = ''
-        showAddWhitelistModal.value = false
-        message.success('IP已添加到白名单')
+        try {
+          await api.post('/ip-control-rules', {
+            ip: newWhitelistIP.value,
+            type: 'whitelist'
+          })
+          whitelist.value.push(newWhitelistIP.value)
+          newWhitelistIP.value = ''
+          showAddWhitelistModal.value = false
+          message.success('IP已添加到白名单')
+        } catch (error) {
+          console.error('添加白名单失败:', error)
+          message.error('添加白名单失败')
+        }
       }
     }
     
-    const removeFromWhitelist = (ip) => {
-      const index = whitelist.value.indexOf(ip)
-      if (index > -1) {
-        whitelist.value.splice(index, 1)
+    const removeFromWhitelist = async (ip) => {
+      try {
+        await api.delete(`/ip-control-rules/${ip}`)
+        const index = whitelist.value.indexOf(ip)
+        if (index > -1) {
+          whitelist.value.splice(index, 1)
+        }
         message.success('IP已从白名单移除')
+      } catch (error) {
+        console.error('移除白名单失败:', error)
+        message.error('移除白名单失败')
       }
     }
     
@@ -482,9 +519,8 @@ export default {
     const loadConfig = async () => {
       configLoading.value = true
       try {
-        // 模拟加载配置
-        await new Promise(resolve => setTimeout(resolve, 1000))
-        message.success('配置加载成功')
+        // 配置暂时显示当前值，后续可以连接真实配置API
+        message.success('配置已刷新')
       } catch (error) {
         message.error('配置加载失败')
       } finally {
@@ -495,9 +531,8 @@ export default {
     const saveConfig = async () => {
       configSaving.value = true
       try {
-        // 模拟保存配置
-        await new Promise(resolve => setTimeout(resolve, 1000))
-        message.success('配置保存成功')
+        // 配置保存功能待后端API支持
+        message.success('配置已保存（演示版本）')
       } catch (error) {
         message.error('配置保存失败')
       } finally {
@@ -505,12 +540,22 @@ export default {
       }
     }
     
+    // 获取IP控制规则
+    const fetchIPRules = async () => {
+      try {
+        const response = await api.get('/ip-control-rules')
+        blacklist.value = response.data.Blacklist || []
+        whitelist.value = response.data.Whitelist || []
+      } catch (error) {
+        console.error('获取IP控制规则失败:', error)
+        message.error('获取IP控制规则失败')
+      }
+    }
+
     // 初始化数据
     onMounted(() => {
       fetchStatus()
-      // 模拟初始数据
-      blacklist.value = ['192.168.1.100', '10.0.0.1']
-      whitelist.value = ['192.168.1.200', '10.0.0.2']
+      fetchIPRules()
     })
     
     return {

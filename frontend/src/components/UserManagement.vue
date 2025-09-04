@@ -347,39 +347,10 @@ export default {
     })
 
     // 在线用户
-    const onlineUsers = ref([
-      { id: 1, username: 'admin', role: 'admin', loginTime: '10分钟前' },
-      { id: 2, username: 'operator', role: 'user', loginTime: '25分钟前' },
-      { id: 3, username: 'monitor', role: 'user', loginTime: '1小时前' }
-    ])
+    const onlineUsers = ref([])
 
     // 用户活动日志
-    const userActivities = ref([
-      {
-        type: 'success',
-        title: '用户登录',
-        message: '用户 admin 成功登录系统',
-        time: '2分钟前'
-      },
-      {
-        type: 'info',
-        title: '添加用户',
-        message: '管理员添加了新用户 newuser',
-        time: '15分钟前'
-      },
-      {
-        type: 'warning',
-        title: '密码修改',
-        message: '用户 john 修改了登录密码',
-        time: '1小时前'
-      },
-      {
-        type: 'error',
-        title: '用户删除',
-        message: '管理员删除了用户 olduser',
-        time: '2小时前'
-      }
-    ])
+    const userActivities = ref([])
 
     // 角色选项
     const roleOptions = [
@@ -526,53 +497,13 @@ export default {
       }
     ]
 
-    // 生成模拟用户数据
-    const generateMockUsers = () => {
-      const mockUsers = [
-        {
-          id: 1,
-          username: 'admin',
-          role: 'admin',
-          created: new Date(Date.now() - 86400000 * 30).toISOString(),
-          last_login: new Date(Date.now() - 600000).toISOString(),
-          active: true
-        },
-        {
-          id: 2,
-          username: 'testuser',
-          role: 'user',
-          created: new Date().toISOString(),
-          last_login: null,
-          active: true
-        }
-      ]
-      
-      // 生成更多模拟用户
-      for (let i = 3; i <= 10; i++) {
-        mockUsers.push({
-          id: i,
-          username: `user${i}`,
-          role: Math.random() > 0.5 ? 'user' : 'admin',
-          created: new Date(Date.now() - Math.random() * 86400000 * 365).toISOString(),
-          last_login: Math.random() > 0.3 ? new Date(Date.now() - Math.random() * 86400000 * 30).toISOString() : null,
-          active: Math.random() > 0.1
-        })
-      }
-      
-      return mockUsers
-    }
 
     // 获取用户数据
     const fetchUsers = async () => {
       refreshing.value = true
       try {
-        try {
-          const response = await api.get('/users')
-          users.value = response.data
-        } catch (apiError) {
-          console.warn('API调用失败，使用模拟数据:', apiError)
-          users.value = generateMockUsers()
-        }
+        const response = await api.get('/users')
+        users.value = response.data || []
         
         // 更新统计数据
         userStats.value = {
@@ -600,7 +531,7 @@ export default {
 
     // 编辑用户
     const editUser = (user) => {
-      message.info(`编辑用户 ${user.username} 功能待实现`)
+      message.warning('编辑用户功能暂未实现')
     }
 
     // 删除确认
@@ -685,11 +616,11 @@ export default {
 
     // 批量操作
     const batchChangeRole = () => {
-      message.info(`批量更改 ${selectedUsers.value.length} 个用户角色功能待实现`)
+      message.warning('批量更改角色功能暂未实现')
     }
 
     const batchResetPassword = () => {
-      message.info(`批量重置 ${selectedUsers.value.length} 个用户密码功能待实现`)
+      message.warning('批量重置密码功能暂未实现')
     }
 
     const batchDeleteUsers = () => {
@@ -698,11 +629,20 @@ export default {
         content: `您确定要删除选中的 ${selectedUsers.value.length} 个用户吗？此操作不可撤销。`,
         positiveText: '确定删除',
         negativeText: '取消',
-        onPositiveClick: () => {
-          message.success(`已删除 ${selectedUsers.value.length} 个用户`)
-          selectedUsers.value = []
-          showBatchModal.value = false
-          fetchUsers()
+        onPositiveClick: async () => {
+          try {
+            const deletePromises = selectedUsers.value.map(username => 
+              api.delete(`/users/${username}`)
+            )
+            await Promise.all(deletePromises)
+            message.success(`已删除 ${selectedUsers.value.length} 个用户`)
+            selectedUsers.value = []
+            showBatchModal.value = false
+            await fetchUsers()
+          } catch (error) {
+            console.error('批量删除用户失败:', error)
+            message.error('批量删除用户失败')
+          }
         }
       })
     }

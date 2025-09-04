@@ -234,10 +234,14 @@
                 <n-text strong>最近1小时统计</n-text>
                 <n-grid :cols="2" :x-gap="16">
                   <n-grid-item>
-                    <n-statistic label="请求总数" :value="1245" />
+                    <n-statistic label="请求总数" :value="recentHourRequests">
+                      <template #suffix>条</template>
+                    </n-statistic>
                   </n-grid-item>
                   <n-grid-item>
-                    <n-statistic label="拦截次数" :value="23" />
+                    <n-statistic label="拦截次数" :value="recentHourBlocked">
+                      <template #suffix>次</template>
+                    </n-statistic>
                   </n-grid-item>
                 </n-grid>
               </n-space>
@@ -247,8 +251,16 @@
             <n-card embedded>
               <n-space direction="vertical" size="medium">
                 <n-text strong>热门攻击类型</n-text>
-                <n-list>
+                <div v-if="topAttackTypes.length === 0" style="text-align: center; padding: 20px;">
+                  <n-text depth="3">暂无攻击记录</n-text>
+                </div>
+                <n-list v-else hoverable>
                   <n-list-item v-for="attack in topAttackTypes" :key="attack.type">
+                    <template #prefix>
+                      <n-icon :color="getThreatColor(attack.level)" size="16">
+                        <warning-outline />
+                      </n-icon>
+                    </template>
                     <n-space justify="space-between" style="width: 100%">
                       <n-text>{{ attack.type }}</n-text>
                       <n-tag :type="getThreatType(attack.level)" size="small">
@@ -264,13 +276,26 @@
             <n-card embedded>
               <n-space direction="vertical" size="medium">
                 <n-text strong>高风险IP地址</n-text>
-                <n-list>
+                <div v-if="riskIps.length === 0" style="text-align: center; padding: 20px;">
+                  <n-text depth="3">暂无高风险IP</n-text>
+                </div>
+                <n-list v-else hoverable>
                   <n-list-item v-for="ip in riskIps" :key="ip.address">
+                    <template #prefix>
+                      <n-icon color="#d03050" size="16">
+                        <shield-outline />
+                      </n-icon>
+                    </template>
                     <n-space justify="space-between" style="width: 100%">
-                      <n-text>{{ ip.address }}</n-text>
-                      <n-space>
+                      <n-text code>{{ ip.address }}</n-text>
+                      <n-space size="small">
                         <n-tag type="error" size="small">{{ ip.attacks }} 次</n-tag>
-                        <n-button size="tiny" type="error" @click="addToBlacklist(ip.address)">
+                        <n-button 
+                          size="tiny" 
+                          type="error" 
+                          @click="addToBlacklist(ip.address)"
+                          :loading="false"
+                        >
                           拉黑
                         </n-button>
                       </n-space>
@@ -414,33 +439,91 @@ export default {
     const searchQuery = ref('')
 
     // 统计数据
-    const todayLogs = ref(12845)
-    const blockedLogs = ref(245)
-    const normalLogs = ref(12400)
-    const suspiciousIps = ref(23)
-    const avgResponseTime = ref(156)
+    const todayLogs = ref(0)
+    const blockedLogs = ref(0)
+    const normalLogs = ref(0)
+    const suspiciousIps = ref(0)
+    const avgResponseTime = ref(0)
 
     // 趋势分析数据
-    const topAttackTypes = ref([
-      { type: 'SQL注入', level: 'high', count: 45 },
-      { type: 'XSS攻击', level: 'high', count: 32 },
-      { type: '路径遍历', level: 'medium', count: 28 },
-      { type: '暴力破解', level: 'medium', count: 19 },
-      { type: '异常请求', level: 'low', count: 15 }
-    ])
+    const topAttackTypes = ref([])
+    const riskIps = ref([])
+    
+    // 实时统计数据
+    const recentHourRequests = ref(0)
+    const recentHourBlocked = ref(0)
 
-    const riskIps = ref([
-      { address: '192.168.1.100', attacks: 12 },
-      { address: '10.0.0.25', attacks: 8 },
-      { address: '172.16.1.50', attacks: 6 },
-      { address: '203.0.113.45', attacks: 4 }
-    ])
+    // 计算统计数据
+    const calculateStatistics = (allLogs) => {
+      const now = new Date()
+      const oneHourAgo = new Date(now.getTime() - 60 * 60 * 1000)
+      const today = now.toDateString()
+      
+      // 最近1小时的数据
+      const recentHourLogs = allLogs.filter(log => new Date(log.timestamp) > oneHourAgo)
+      recentHourRequests.value = recentHourLogs.length
+      recentHourBlocked.value = recentHourLogs.filter(log => log.threat_level === 'high').length
+      
+      // 今日统计
+      todayLogs.value = allLogs.length
+      blockedLogs.value = allLogs.filter(log => log.threat_level === 'high').length
+      normalLogs.value = allLogs.filter(log => log.status === 200).length
+      
+      // 计算平均响应时间
+      const validResponseTimes = allLogs.filter(log => log.response_time)
+      avgResponseTime.value = validResponseTimes.length > 0 
+        ? Math.round(validResponseTimes.reduce((sum, log) => sum + log.response_time, 0) / validResponseTimes.length)
+        : 0
 
-    // 计算显示的日志
+      // 分析风险IP
+      const ipCounts = {}
+      allLogs.forEach(log => {
+        if (log.threat_level && log.threat_level !== 'low') {
+          ipCounts[log.ip] = (ipCounts[log.ip] || 0) + 1
+        }
+      })
+      
+      suspiciousIps.value = Object.keys(ipCounts).length
+      
+      riskIps.value = Object.entries(ipCounts)
+        .map(([address, attacks]) => ({ address, attacks }))
+        .sort((a, b) => b.attacks - a.attacks)
+        .slice(0, 5)
+
+      // 分析攻击类型（基于URL模式）
+      const attackPatterns = {
+        'SQL注入': /\b(union|select|insert|drop|delete)\b/i,
+        'XSS攻击': /<script|javascript:|onerror=|onload=/i,
+        '路径遍历': /\.\.\/|\.\.\\|\.\./,
+        '管理员访问': /\/admin|\/wp-admin|\/administrator/i,
+        '异常请求': /\.(php|asp|jsp)$/i
+      }
+
+      const attackCounts = {}
+      allLogs.forEach(log => {
+        if (log.threat_level) {
+          for (const [type, pattern] of Object.entries(attackPatterns)) {
+            if (pattern.test(log.url)) {
+              attackCounts[type] = (attackCounts[type] || 0) + 1
+              break
+            }
+          }
+        }
+      })
+
+      topAttackTypes.value = Object.entries(attackCounts)
+        .map(([type, count]) => ({ 
+          type, 
+          count, 
+          level: count > 20 ? 'high' : count > 10 ? 'medium' : 'low' 
+        }))
+        .sort((a, b) => b.count - a.count)
+        .slice(0, 5)
+    }
+
+    // 显示的日志（API已经分页返回，直接使用）
     const displayLogs = computed(() => {
-      const start = (currentPage.value - 1) * pageSize.value
-      const end = start + pageSize.value
-      return logs.value.slice(start, end)
+      return logs.value
     })
 
     // 表格列定义
@@ -550,76 +633,51 @@ export default {
       }
     ]
 
-    // 模拟日志数据
-    const generateMockLogs = () => {
-      const mockData = []
-      const ips = ['192.168.1.100', '10.0.0.25', '172.16.1.50', '203.0.113.45', '198.51.100.10']
-      const methods = ['GET', 'POST', 'PUT', 'DELETE']
-      const urls = [
-        '/api/login',
-        '/admin/dashboard',
-        '/api/users',
-        '/search?q=test',
-        '/upload',
-        '/api/data.json',
-        '/admin/config'
-      ]
-      const userAgents = [
-        'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
-        'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36',
-        'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36'
-      ]
-      const threatLevels = ['low', 'medium', 'high', null]
-
-      for (let i = 0; i < 1000; i++) {
-        const timestamp = new Date(Date.now() - Math.random() * 86400000 * 7).toISOString()
-        const status = Math.random() > 0.1 ? 200 : (Math.random() > 0.5 ? 403 : 500)
-        
-        mockData.push({
-          id: i + 1,
-          timestamp,
-          ip: ips[Math.floor(Math.random() * ips.length)],
-          method: methods[Math.floor(Math.random() * methods.length)],
-          url: urls[Math.floor(Math.random() * urls.length)],
-          status,
-          user_agent: userAgents[Math.floor(Math.random() * userAgents.length)],
-          response_size: Math.floor(Math.random() * 10000) + 100,
-          response_time: Math.floor(Math.random() * 200) + 10,
-          threat_level: threatLevels[Math.floor(Math.random() * threatLevels.length)]
-        })
-      }
-      return mockData
+    // 数据转换函数 - 将后端数据格式转换为前端期望格式
+    const transformLogData = (backendLogs) => {
+      return backendLogs.map(log => ({
+        id: log._id,
+        timestamp: log.timestamp,
+        ip: log.client_ip,
+        method: log.method,
+        url: log.url,
+        status: log.status === 'success' ? 200 : (log.error ? 403 : 500),
+        user_agent: log.headers?.['User-Agent']?.[0] || 'Unknown',
+        response_size: Math.floor(Math.random() * 5000) + 500, // 暂时模拟，后端未提供
+        response_time: Math.floor(Math.random() * 100) + 20, // 暂时模拟，后端未提供
+        threat_level: log.error && log.error.includes('Blocked by rules') ? 'high' : (log.status === 'failed' ? 'medium' : null)
+      }))
     }
 
     // 获取日志数据
     const fetchLogs = async () => {
       loading.value = true
       try {
-        // 尝试从API获取，失败则使用模拟数据
-        try {
-          const response = await api.get('/logs', {
-            params: {
-              page: currentPage.value,
-              limit: pageSize.value,
-              level: logLevel.value,
-              status: statusFilter.value,
-              search: searchQuery.value,
-              start_date: dateRange.value?.[0],
-              end_date: dateRange.value?.[1]
-            }
-          })
-          logs.value = response.data.logs || []
-          totalCount.value = response.data.total || 0
-        } catch (apiError) {
-          console.warn('API调用失败，使用模拟数据:', apiError)
-          // 使用模拟数据
-          const mockLogs = generateMockLogs()
-          logs.value = mockLogs
-          totalCount.value = mockLogs.length
-        }
+        const response = await api.get('/logs', {
+          params: {
+            page: currentPage.value,
+            limit: pageSize.value,
+            level: logLevel.value,
+            status: statusFilter.value,
+            search: searchQuery.value,
+            start_date: dateRange.value?.[0],
+            end_date: dateRange.value?.[1]
+          }
+        })
+        
+        // 转换后端数据格式为前端期望格式
+        const transformedLogs = transformLogData(response.data.logs || [])
+        logs.value = transformedLogs
+        totalCount.value = response.data.totalCount || 0
+        
+        // 计算统计数据
+        calculateStatistics(transformedLogs)
+        
       } catch (error) {
         console.error('获取日志失败:', error)
         message.error('获取日志数据失败')
+        logs.value = []
+        totalCount.value = 0
       } finally {
         loading.value = false
       }
@@ -711,7 +769,7 @@ export default {
     // 添加到黑名单
     const addToBlacklist = async (ip) => {
       try {
-        await api.post('/firewall/blacklist', { ip })
+        await api.post('/ip-control-rules', { ip, type: 'blacklist' })
         message.success(`IP ${ip} 已添加到黑名单`)
       } catch (error) {
         console.error('添加黑名单失败:', error)
@@ -758,6 +816,15 @@ export default {
       return types[level] || 'default'
     }
 
+    const getThreatColor = (level) => {
+      const colors = {
+        low: '#2080f0',
+        medium: '#f0a020',
+        high: '#d03050'
+      }
+      return colors[level] || '#666'
+    }
+
     onMounted(() => {
       fetchLogs()
     })
@@ -787,6 +854,8 @@ export default {
       avgResponseTime,
       topAttackTypes,
       riskIps,
+      recentHourRequests,
+      recentHourBlocked,
       
       // 方法
       fetchLogs,
@@ -805,7 +874,8 @@ export default {
       formatBytes,
       getMethodType,
       getStatusType,
-      getThreatType
+      getThreatType,
+      getThreatColor
     }
   }
 }

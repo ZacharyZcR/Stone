@@ -383,56 +383,6 @@ export default {
     };
 
     // 模拟规则数据
-    const mockRules = [
-      {
-        id: 1,
-        name: 'SQL_INJECTION_BASIC',
-        type: 'sql_injection',
-        description: '基础SQL注入防护规则',
-        pattern: '/(union|select|insert|delete|update|drop).*\\s+(from|into|where)/i',
-        risk_level: 'high',
-        action: 'block',
-        enabled: true,
-        created_at: '2024-01-10',
-        triggered_count: 156
-      },
-      {
-        id: 2,
-        name: 'XSS_SCRIPT_BLOCK',
-        type: 'xss',
-        description: 'XSS脚本注入防护',
-        pattern: '/<script[^>]*>.*<\\/script>/i',
-        risk_level: 'high',
-        action: 'block',
-        enabled: true,
-        created_at: '2024-01-12',
-        triggered_count: 89
-      },
-      {
-        id: 3,
-        name: 'PATH_TRAVERSAL_DETECT',
-        type: 'path_traversal',
-        description: '路径遍历攻击检测',
-        pattern: '/(\\.\\.\\/|\\.\\\\)/i',
-        risk_level: 'medium',
-        action: 'monitor',
-        enabled: false,
-        created_at: '2024-01-15',
-        triggered_count: 23
-      },
-      {
-        id: 4,
-        name: 'COMMAND_INJECTION_BLOCK',
-        type: 'command_injection',
-        description: '命令注入防护规则',
-        pattern: '/(;|\\||&|`|\\$\\(|\\${)/i',
-        risk_level: 'critical',
-        action: 'block',
-        enabled: true,
-        created_at: '2024-01-18',
-        triggered_count: 45
-      }
-    ];
 
     // 计算属性
     const activeRulesCount = computed(() => 
@@ -582,12 +532,12 @@ export default {
           params: { page: currentPage.value, pageSize: pageSize.value }
         });
         rules.value = response.data.rules || [];
-        totalCount.value = response.data.totalCount;
+        totalCount.value = response.data.totalCount || rules.value.length;
       } catch (error) {
         console.error('获取规则失败:', error);
-        // 使用模拟数据作为fallback
-        rules.value = mockRules;
-        totalCount.value = mockRules.length;
+        message.error('获取规则失败，请稍后重试');
+        rules.value = [];
+        totalCount.value = 0;
       } finally {
         loading.value = false;
         refreshing.value = false;
