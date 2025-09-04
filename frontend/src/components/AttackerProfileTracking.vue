@@ -174,43 +174,9 @@
                   </n-card>
                 </div>
                 
-                <!-- 默认数据展示 -->
+                <!-- 无攻击类型数据时显示 -->
                 <div v-if="!profile.attack_types || profile.attack_types.length === 0">
-                  <n-card size="small" hoverable embedded>
-                    <n-space justify="space-between" align="center">
-                      <n-space align="center">
-                        <n-avatar size="small" color="#d03050">
-                          <n-icon size="16"><shield-outline /></n-icon>
-                        </n-avatar>
-                        <n-text strong>SQL注入</n-text>
-                      </n-space>
-                      <n-tag type="error" size="small">23次</n-tag>
-                    </n-space>
-                  </n-card>
-                  
-                  <n-card size="small" hoverable embedded>
-                    <n-space justify="space-between" align="center">
-                      <n-space align="center">
-                        <n-avatar size="small" color="#f0a020">
-                          <n-icon size="16"><shield-outline /></n-icon>
-                        </n-avatar>
-                        <n-text strong>XSS攻击</n-text>
-                      </n-space>
-                      <n-tag type="warning" size="small">15次</n-tag>
-                    </n-space>
-                  </n-card>
-                  
-                  <n-card size="small" hoverable embedded>
-                    <n-space justify="space-between" align="center">
-                      <n-space align="center">
-                        <n-avatar size="small" color="#2080f0">
-                          <n-icon size="16"><shield-outline /></n-icon>
-                        </n-avatar>
-                        <n-text strong>路径遍历</n-text>
-                      </n-space>
-                      <n-tag type="info" size="small">8次</n-tag>
-                    </n-space>
-                  </n-card>
+                  <n-empty description="暂无攻击类型数据" size="small" />
                 </div>
               </n-space>
             </div>
@@ -434,25 +400,6 @@ export default {
         console.error('获取攻击者画像失败:', err);
         error.value = '获取数据失败，请检查IP地址或稍后再试';
         profile.value = null;
-        // 提供模拟数据作为fallback
-        profile.value = {
-          threat_level: '高危',
-          attack_count: 156,
-          first_seen: '2024-01-10T08:30:00Z',
-          last_seen: '2024-01-15T14:25:00Z',
-          country: '俄罗斯',
-          city: '莫斯科',
-          isp: 'Rostelecom',
-          asn: 'AS12389',
-          attack_types: [
-            { type: 'SQL注入', count: 45 },
-            { type: 'XSS攻击', count: 32 },
-            { type: '路径遍历', count: 28 },
-            { type: '命令注入', count: 21 },
-            { type: '文件上传', count: 15 }
-          ]
-        };
-        error.value = null;
       } finally {
         loading.value = false;
       }
